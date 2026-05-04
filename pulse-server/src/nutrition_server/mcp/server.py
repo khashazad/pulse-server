@@ -15,45 +15,40 @@ from nutrition_server.config import get_settings
 from nutrition_server.db import get_session, transaction
 from nutrition_server.macro_aggregates import sum_food_entry_macros
 from nutrition_server.mcp.auth import ApiKeyMiddleware
-from nutrition_server.models import FoodEntryResponse, MacroTargets, MacroTotals
-from nutrition_server.quantity import parse_quantity, scale_macros
+from nutrition_server.models import FoodEntryCreate, FoodEntryResponse, MacroTargets, MacroTotals
 from nutrition_server.repositories.entries import EntriesRepository
 from nutrition_server.repositories.targets import TargetsRepository
-from nutrition_server.services.log_food_service import log_food_one_shot
+from nutrition_server.services.entries_service import create_entries_with_side_effects
 from nutrition_server.services.summary_service import build_daily_summary
-
-
-class ParsedQuantityOut(BaseModel):
-    value: float
-    unit: str
-    grams: float | None
-    is_count: bool
 
 
 class FoodCandidate(BaseModel):
     fdc_id: int
     description: str
+    basis: str  # "per_100g" or "per_serving"
     serving_size: float | None
     serving_size_unit: str | None
-    per_basis: MacroTotals
-    basis_label: str
-    scaled_for_quantity: MacroTotals
-    scaling_confidence: str
-    recommended: bool
+    calories: int
+    protein_g: float
+    carbs_g: float
+    fat_g: float
 
 
 class SearchFoodResponse(BaseModel):
     query: str
-    parsed_quantity: ParsedQuantityOut
     candidates: list[FoodCandidate]
+    note: str = (
+        "Macros are reported on the basis indicated by `basis`. "
+        "Scale them yourself for the user's quantity, then call `log_food` with the final "
+        "calories/protein_g/carbs_g/fat_g."
+    )
 
 
 class LogFoodResponse(BaseModel):
     entry: FoodEntryResponse
-    scaling_confidence: str
     day_totals: MacroTotals
-    remaining_vs_target: MacroTotals | None = None
     target: MacroTargets | None = None
+    remaining_vs_target: MacroTotals | None = None
 
 
 class DaySummary(BaseModel):
@@ -64,19 +59,8 @@ class DaySummary(BaseModel):
     entries: list[FoodEntryResponse]
 
 
-def _basis_label(food: dict[str, Any]) -> str:
-    if food.get("serving_size") and food.get("serving_size_unit"):
-        return f"per serving ({food['serving_size']} {food['serving_size_unit']})"
-    return "per 100 g"
-
-
-def _to_macro_totals(food: dict[str, Any]) -> MacroTotals:
-    return MacroTotals(
-        calories=int(food.get("calories") or 0),
-        protein_g=float(food.get("protein_g") or 0.0),
-        carbs_g=float(food.get("carbs_g") or 0.0),
-        fat_g=float(food.get("fat_g") or 0.0),
-    )
+def _basis_for(food: dict[str, Any]) -> str:
+    return "per_serving" if food.get("serving_size") else "per_100g"
 
 
 def build_mcp(usda_getter) -> FastMCP:
@@ -92,74 +76,84 @@ def build_mcp(usda_getter) -> FastMCP:
     @mcp.tool
     async def search_food(
         description: str,
-        quantity: str = "1 serving",
         limit: int = Field(default=3, ge=1, le=10),
     ) -> SearchFoodResponse:
-        """Search USDA for foods matching `description`, scale macros to the parsed `quantity`.
+        """Search USDA FoodData Central for foods matching `description`.
 
-        Returns the top matches (default 3) with a `recommended` flag on the first. Use the
-        returned `fdc_id` with `log_food` to commit. Quantity accepts free text like "150g",
-        "1 cup", "2 tbsp", "1 wrap"; when units are not gram-convertible, scaling falls back
-        to count-of-serving with `scaling_confidence` set to "medium" or "low".
+        Returns up to `limit` candidates (default 3). Each candidate's macros are reported on the
+        basis given by `basis`:
+        - `per_100g` → calories/macros are per 100 grams (USDA SR Legacy / Foundation foods)
+        - `per_serving` → calories/macros are per `serving_size` `serving_size_unit` (Branded foods)
+
+        You (the model) are responsible for parsing the user's free-text quantity and scaling these
+        macros yourself, then passing the final values to `log_food`. The server stores what you
+        send and does not re-scale.
         """
         usda = usda_getter()
-        results = await usda.search(description, page_size=max(limit, 5))
-        parsed = parse_quantity(quantity)
-        candidates: list[FoodCandidate] = []
-        for idx, food in enumerate(results[:limit]):
-            scaled, confidence = scale_macros(food, parsed)
-            candidates.append(
-                FoodCandidate(
-                    fdc_id=int(food["fdc_id"]),
-                    description=str(food["description"]),
-                    serving_size=food.get("serving_size"),
-                    serving_size_unit=food.get("serving_size_unit"),
-                    per_basis=_to_macro_totals(food),
-                    basis_label=_basis_label(food),
-                    scaled_for_quantity=MacroTotals(**scaled),
-                    scaling_confidence=confidence,
-                    recommended=(idx == 0),
-                )
+        results = await usda.search(description, page_size=limit)
+        candidates = [
+            FoodCandidate(
+                fdc_id=int(food["fdc_id"]),
+                description=str(food["description"]),
+                basis=_basis_for(food),
+                serving_size=food.get("serving_size"),
+                serving_size_unit=food.get("serving_size_unit"),
+                calories=int(food.get("calories") or 0),
+                protein_g=float(food.get("protein_g") or 0.0),
+                carbs_g=float(food.get("carbs_g") or 0.0),
+                fat_g=float(food.get("fat_g") or 0.0),
             )
-        return SearchFoodResponse(
-            query=description,
-            parsed_quantity=ParsedQuantityOut(
-                value=parsed.value,
-                unit=parsed.unit,
-                grams=parsed.grams,
-                is_count=parsed.is_count,
-            ),
-            candidates=candidates,
-        )
+            for food in results
+        ]
+        return SearchFoodResponse(query=description, candidates=candidates)
 
     @mcp.tool
     async def log_food(
         fdc_id: int,
-        quantity: str,
-        display_name: str | None = None,
+        usda_description: str,
+        display_name: str,
+        quantity_text: str,
+        calories: int = Field(ge=0),
+        protein_g: float = Field(ge=0),
+        carbs_g: float = Field(ge=0),
+        fat_g: float = Field(ge=0),
+        normalized_quantity_value: float | None = None,
+        normalized_quantity_unit: str | None = None,
     ) -> LogFoodResponse:
-        """Log a food entry for today (server timezone).
+        """Log a food entry for today (server timezone) with pre-scaled macros.
 
-        Pass `fdc_id` from a prior `search_food` call. `quantity` is free text; the server
-        parses it and scales macros server-side. `display_name` overrides the verbose USDA
-        description with a friendlier label.
+        Pass values you computed from a prior `search_food` result:
+        - `fdc_id` and `usda_description` from the chosen candidate (immutable receipt)
+        - `display_name` is the user-facing label (you can rewrite USDA's verbose description)
+        - `quantity_text` is the user's original phrasing ("150g", "1 wrap", "2 cups")
+        - `calories` / `protein_g` / `carbs_g` / `fat_g` are the FINAL values for the consumed
+          quantity — already scaled from the basis returned by `search_food`
+        - `normalized_quantity_value` / `_unit` are optional structured forms when the quantity is
+          gram-convertible (helps later analytics)
         """
-        usda = usda_getter()
+        item = FoodEntryCreate(
+            display_name=display_name,
+            quantity_text=quantity_text,
+            normalized_quantity_value=normalized_quantity_value,
+            normalized_quantity_unit=normalized_quantity_unit,
+            usda_fdc_id=fdc_id,
+            usda_description=usda_description,
+            calories=calories,
+            protein_g=protein_g,
+            carbs_g=carbs_g,
+            fat_g=fat_g,
+        )
         now = DateTimeValue.now(tz=tz)
+
         async with get_session() as session:
-            created_row, day_rows, confidence = await log_food_one_shot(
+            created_rows, day_rows = await create_entries_with_side_effects(
                 session=session,
-                usda=usda,
                 user_key=settings.default_user_key,
-                fdc_id=fdc_id,
-                quantity_text=quantity,
-                display_name_override=display_name,
+                items=[item],
                 now=now,
             )
-
-            day_totals = sum_food_entry_macros(
-                [FoodEntryResponse(**row) for row in day_rows]
-            )
+            day_entries = [FoodEntryResponse(**row) for row in day_rows]
+            day_totals = sum_food_entry_macros(day_entries)
 
             targets_repo = TargetsRepository(session)
             target_row = await targets_repo.get_target_profile(settings.default_user_key)
@@ -181,11 +175,10 @@ def build_mcp(usda_getter) -> FastMCP:
             )
 
         return LogFoodResponse(
-            entry=FoodEntryResponse(**created_row),
-            scaling_confidence=confidence,
+            entry=FoodEntryResponse(**created_rows[0]),
             day_totals=day_totals,
-            remaining_vs_target=remaining,
             target=target_obj,
+            remaining_vs_target=remaining,
         )
 
     @mcp.tool
@@ -219,7 +212,6 @@ def build_mcp(usda_getter) -> FastMCP:
             except HTTPException as exc:
                 if exc.status_code != 404:
                     raise
-                # No targets — still return entries + consumed.
                 from nutrition_server.services.log_ids import daily_log_id
 
                 entries_repo = EntriesRepository(session)
