@@ -3,9 +3,11 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastmcp.utilities.lifespan import combine_lifespans
 
 from nutrition_server import auth, db
 from nutrition_server.config import get_settings
+from nutrition_server.mcp import build_mcp
 from nutrition_server.routers import entries, logs, summary, targets
 from nutrition_server.routers import usda as usda_router
 from nutrition_server.usda import USDAClient
@@ -49,7 +51,14 @@ async def lifespan(app: FastAPI):
     await db.close_pool()
 
 
-app = FastAPI(title="Nutrition Server", version="0.1.0", lifespan=lifespan)
+mcp = build_mcp(get_usda_client)
+mcp_app = mcp.http_app(path="/")
+
+app = FastAPI(
+    title="Nutrition Server",
+    version="0.1.0",
+    lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
+)
 
 
 # Summary: Returns a simple health status payload for service monitoring.
@@ -68,3 +77,4 @@ app.include_router(summary.router)
 app.include_router(targets.router)
 app.include_router(usda_router.router)
 app.include_router(logs.router)
+app.mount("/mcp", mcp_app)

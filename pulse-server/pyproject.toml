@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.16",
     "pydantic-settings>=2.7",
     "httpx>=0.28",
+    "fastmcp>=2.7",
 ]
 
 [project.optional-dependencies]
