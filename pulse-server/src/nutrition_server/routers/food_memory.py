@@ -16,6 +16,7 @@ from nutrition_server.models import (
     FoodMemoryUsdaWrite,
     ResolvedFood,
 )
+from nutrition_server.repositories.custom_foods import CustomFoodsRepository
 from nutrition_server.repositories.food_memory import FoodMemoryRepository
 from nutrition_server.services.food_memory_service import resolve_food_by_name
 from nutrition_server.services.normalize import normalize_name
@@ -107,6 +108,9 @@ async def remember_food_custom(
 ) -> FoodMemoryEntry:
     effective_user_key = user_key or settings.default_user_key
     now = DateTimeValue.now(tz=TZ)
+    custom_foods_repo = CustomFoodsRepository(session)
+    if await custom_foods_repo.get_by_id(body.custom_food_id, effective_user_key) is None:
+        raise HTTPException(status_code=404, detail="Custom food not found")
     repo = FoodMemoryRepository(session)
     async with transaction(session):
         row = await repo.upsert_custom(
