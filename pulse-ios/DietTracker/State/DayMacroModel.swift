@@ -21,7 +21,7 @@ final class DayMacroModel {
         do {
             let summary = try await client.summary(date: date)
             state = .loaded(summary)
-        } catch let error as NutritionError {
+        } catch let error as DietTrackerError {
             state = .failed(error)
         } catch {
             state = .failed(.server(status: -1))

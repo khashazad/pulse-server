@@ -1,4 +1,4 @@
-name: Nutrition
+name: DietTracker
 options:
   bundleIdPrefix: com.khxsh
   deploymentTarget:
@@ -14,19 +14,19 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
 
 targets:
-  Nutrition:
+  DietTracker:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - path: Nutrition
+      - path: DietTracker
         excludes:
           - "Info.plist"
     resources: []
     info:
-      path: Nutrition/Info.plist
+      path: DietTracker/Info.plist
       properties:
-        CFBundleDisplayName: Nutrition
+        CFBundleDisplayName: Diet Tracker
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -35,23 +35,23 @@ targets:
         ITSAppUsesNonExemptEncryption: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.khxsh.nutrition
+        PRODUCT_BUNDLE_IDENTIFIER: com.khxsh.diettracker
         TARGETED_DEVICE_FAMILY: "1"  # iPhone only
 
-  NutritionTests:
+  DietTrackerTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - path: NutritionTests
+      - path: DietTrackerTests
     dependencies:
-      - target: Nutrition
+      - target: DietTracker
     info:
-      path: NutritionTests/Info.plist
+      path: DietTrackerTests/Info.plist
       properties:
-        CFBundleIdentifier: com.khxsh.nutrition.tests
+        CFBundleIdentifier: com.khxsh.diettracker.tests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.khxsh.nutrition.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.khxsh.diettracker.tests
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Nutrition.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Nutrition"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/DietTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DietTracker"

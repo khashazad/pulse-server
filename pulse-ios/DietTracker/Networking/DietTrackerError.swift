@@ -1,6 +1,6 @@
 import Foundation
 
-enum NutritionError: Error, Equatable {
+enum DietTrackerError: Error, Equatable {
     case notConfigured
     case unauthorized
     case notFound
@@ -8,7 +8,7 @@ enum NutritionError: Error, Equatable {
     case decoding(String)
     case server(status: Int)
 
-    static func == (lhs: NutritionError, rhs: NutritionError) -> Bool {
+    static func == (lhs: DietTrackerError, rhs: DietTrackerError) -> Bool {
         switch (lhs, rhs) {
         case (.notConfigured, .notConfigured),
              (.unauthorized, .unauthorized),

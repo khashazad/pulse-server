@@ -1,5 +1,5 @@
 import XCTest
-@testable import Nutrition
+@testable import DietTracker
 
 final class StubURLProtocol: URLProtocol {
     static var responder: ((URLRequest) -> (HTTPURLResponse, Data))?
@@ -21,7 +21,7 @@ final class StubURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-final class NutritionClientTests: XCTestCase {
+final class DietTrackerClientTests: XCTestCase {
 
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
@@ -49,7 +49,7 @@ final class NutritionClientTests: XCTestCase {
             return (resp, summaryJSON)
         }
 
-        let client = NutritionClient(
+        let client = DietTrackerClient(
             baseURL: URL(string: "https://example.test")!,
             apiKey: "secret-key",
             session: makeSession()
@@ -73,7 +73,7 @@ final class NutritionClientTests: XCTestCase {
             return (resp, logsJSON)
         }
 
-        let client = NutritionClient(
+        let client = DietTrackerClient(
             baseURL: URL(string: "https://example.test")!,
             apiKey: "k",
             session: makeSession()
@@ -95,7 +95,7 @@ final class NutritionClientTests: XCTestCase {
             let resp = HTTPURLResponse(url: req.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
             return (resp, Data())
         }
-        let client = NutritionClient(
+        let client = DietTrackerClient(
             baseURL: URL(string: "https://example.test")!,
             apiKey: "k",
             session: makeSession()
@@ -104,7 +104,7 @@ final class NutritionClientTests: XCTestCase {
         do {
             _ = try await client.summary(date: date)
             XCTFail("Expected unauthorized error")
-        } catch let error as NutritionError {
+        } catch let error as DietTrackerError {
             XCTAssertEqual(error, .unauthorized)
         }
     }
@@ -114,7 +114,7 @@ final class NutritionClientTests: XCTestCase {
             let resp = HTTPURLResponse(url: req.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
             return (resp, Data())
         }
-        let client = NutritionClient(
+        let client = DietTrackerClient(
             baseURL: URL(string: "https://example.test")!,
             apiKey: "k",
             session: makeSession()
@@ -123,7 +123,7 @@ final class NutritionClientTests: XCTestCase {
         do {
             _ = try await client.summary(date: date)
             XCTFail("Expected notFound error")
-        } catch let error as NutritionError {
+        } catch let error as DietTrackerError {
             XCTAssertEqual(error, .notFound)
         }
     }

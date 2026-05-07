@@ -65,7 +65,7 @@ struct DayMacroView: View {
     }
 
     @ViewBuilder
-    private func errorBody(_ error: NutritionError) -> some View {
+    private func errorBody(_ error: DietTrackerError) -> some View {
         switch error {
         case .notFound:
             ContentUnavailableView {

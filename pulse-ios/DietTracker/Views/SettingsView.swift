@@ -12,7 +12,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Server") {
-                    TextField("https://nutrition.up.railway.app", text: $settings.baseURLString)
+                    TextField("https://your-server.up.railway.app", text: $settings.baseURLString)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()

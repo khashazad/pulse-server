@@ -1,6 +1,6 @@
 import Foundation
 
-actor NutritionClient {
+actor DietTrackerClient {
     private let baseURL: URL
     private let apiKey: String
     private let session: URLSession
@@ -10,7 +10,7 @@ actor NutritionClient {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.session = session
-        self.decoder = JSONDecoder.nutritionDefault()
+        self.decoder = JSONDecoder.dietTrackerDefault()
     }
 
     func summary(date: Date) async throws -> DailySummary {
@@ -35,10 +35,10 @@ actor NutritionClient {
 
     private func makeURL(path: String, query: [URLQueryItem]) throws -> URL {
         guard var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
-            throw NutritionError.notConfigured
+            throw DietTrackerError.notConfigured
         }
         comps.queryItems = query
-        guard let url = comps.url else { throw NutritionError.notConfigured }
+        guard let url = comps.url else { throw DietTrackerError.notConfigured }
         return url
     }
 
@@ -52,11 +52,11 @@ actor NutritionClient {
         do {
             (data, response) = try await session.data(for: req)
         } catch let urlError as URLError {
-            throw NutritionError.network(urlError)
+            throw DietTrackerError.network(urlError)
         }
 
         guard let http = response as? HTTPURLResponse else {
-            throw NutritionError.server(status: -1)
+            throw DietTrackerError.server(status: -1)
         }
 
         switch http.statusCode {
@@ -64,16 +64,16 @@ actor NutritionClient {
             do {
                 return try decoder.decode(T.self, from: data)
             } catch let decodingError {
-                throw NutritionError.decoding(String(describing: decodingError))
+                throw DietTrackerError.decoding(String(describing: decodingError))
             }
         case 401, 403:
-            throw NutritionError.unauthorized
+            throw DietTrackerError.unauthorized
         case 404:
-            throw NutritionError.notFound
+            throw DietTrackerError.notFound
         case 500...:
-            throw NutritionError.server(status: http.statusCode)
+            throw DietTrackerError.server(status: http.statusCode)
         default:
-            throw NutritionError.server(status: http.statusCode)
+            throw DietTrackerError.server(status: http.statusCode)
         }
     }
 }

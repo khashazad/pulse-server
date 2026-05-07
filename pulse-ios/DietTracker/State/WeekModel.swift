@@ -21,7 +21,7 @@ final class WeekModel {
         do {
             let logs = try await client.logs(from: from, to: today)
             state = .loaded(logs)
-        } catch let error as NutritionError {
+        } catch let error as DietTrackerError {
             state = .failed(error)
         } catch {
             state = .failed(.server(status: -1))

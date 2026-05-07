@@ -27,8 +27,8 @@ final class AppSettings {
         return URL(string: withScheme)
     }
 
-    func makeClient() -> NutritionClient? {
+    func makeClient() -> DietTrackerClient? {
         guard isConfigured, let url = normalizedBaseURL else { return nil }
-        return NutritionClient(baseURL: url, apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+        return DietTrackerClient(baseURL: url, apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }

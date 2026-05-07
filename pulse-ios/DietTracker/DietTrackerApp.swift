@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct NutritionApp: App {
+struct DietTrackerApp: App {
     @State private var settings = AppSettings()
 
     var body: some Scene {

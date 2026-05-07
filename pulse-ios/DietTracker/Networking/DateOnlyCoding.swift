@@ -27,7 +27,7 @@ enum DateOnly {
 }
 
 extension JSONDecoder {
-    static func nutritionDefault() -> JSONDecoder {
+    static func dietTrackerDefault() -> JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()

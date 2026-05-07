@@ -1,5 +1,5 @@
 import XCTest
-@testable import Nutrition
+@testable import DietTracker
 
 final class DecodingTests: XCTestCase {
 
@@ -14,7 +14,7 @@ final class DecodingTests: XCTestCase {
 
     func testDecodeDailySummary() throws {
         let data = try loadFixture("summary")
-        let summary = try JSONDecoder.nutritionDefault().decode(DailySummary.self, from: data)
+        let summary = try JSONDecoder.dietTrackerDefault().decode(DailySummary.self, from: data)
 
         XCTAssertEqual(summary.target.calories, 2200)
         XCTAssertEqual(summary.consumed.calories, 740)
@@ -35,7 +35,7 @@ final class DecodingTests: XCTestCase {
 
     func testDecodeLogsList() throws {
         let data = try loadFixture("logs")
-        let list = try JSONDecoder.nutritionDefault().decode(LogsList.self, from: data)
+        let list = try JSONDecoder.dietTrackerDefault().decode(LogsList.self, from: data)
 
         XCTAssertEqual(list.logs.count, 7)
         XCTAssertEqual(list.logs[0].totalCalories, 740)
@@ -45,7 +45,7 @@ final class DecodingTests: XCTestCase {
 
     func testSummaryDateIsParsedAsCalendarDate() throws {
         let data = try loadFixture("summary")
-        let summary = try JSONDecoder.nutritionDefault().decode(DailySummary.self, from: data)
+        let summary = try JSONDecoder.dietTrackerDefault().decode(DailySummary.self, from: data)
         let str = DateOnly.string(from: summary.date)
         XCTAssertEqual(str, "2026-05-06")
     }
