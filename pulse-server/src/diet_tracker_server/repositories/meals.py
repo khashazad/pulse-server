@@ -4,7 +4,7 @@ from datetime import datetime as DateTimeValue
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Integer, cast, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -150,10 +150,10 @@ class MealsRepository:
                 meals.c.normalized_name,
                 meals.c.notes,
                 func.count(meal_items.c.id).label("item_count"),
-                func.coalesce(func.sum(meal_items.c.calories), 0).label("total_calories"),
-                func.coalesce(func.sum(meal_items.c.protein_g), 0.0).label("total_protein_g"),
-                func.coalesce(func.sum(meal_items.c.carbs_g), 0.0).label("total_carbs_g"),
-                func.coalesce(func.sum(meal_items.c.fat_g), 0.0).label("total_fat_g"),
+                cast(func.coalesce(func.sum(meal_items.c.calories), 0), Integer).label("total_calories"),
+                func.coalesce(func.sum(meal_items.c.protein_g), 0).label("total_protein_g"),
+                func.coalesce(func.sum(meal_items.c.carbs_g), 0).label("total_carbs_g"),
+                func.coalesce(func.sum(meal_items.c.fat_g), 0).label("total_fat_g"),
             )
             .select_from(meals.outerjoin(meal_items, meal_items.c.meal_id == meals.c.id))
             .where(meals.c.user_key == user_key)
