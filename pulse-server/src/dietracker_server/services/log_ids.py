@@ -6,7 +6,7 @@ from datetime import date as DateValue
 
 # Summary: Derives a stable UUID for a user's daily log date.
 # Parameters:
-# - user_key (str): Unique user identifier owning the nutrition log.
+# - user_key (str): Unique user identifier owning the diet log.
 # - log_date (DateValue): Target log date used for deterministic UUID derivation.
 # Returns:
 # - str: UUID5 string derived from user key and date.

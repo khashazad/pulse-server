@@ -15,9 +15,9 @@ settings = get_settings()
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
-# Summary: Returns a daily nutrition summary combining targets, consumed totals, and remaining budget.
+# Summary: Returns a daily diet summary combining targets, consumed totals, and remaining budget.
 # Parameters:
-# - summary_date (datetime.date): Date whose nutrition summary is requested.
+# - summary_date (datetime.date): Date whose diet summary is requested.
 # - user_key (str | None): Optional user identifier override.
 # Returns:
 # - DailySummaryResponse: Per-day targets, consumed totals, remaining totals, and raw entries.

@@ -47,7 +47,7 @@ from dietracker_server.services.summary_service import build_daily_summary
 
 
 WORKFLOW_INSTRUCTIONS = """
-Nutrition tracking workflow. Follow this order on every food-related interaction:
+Diet tracking workflow. Follow this order on every food-related interaction:
 
 1) MEALS FIRST. Call `list_meals` once early in the conversation. If anything the user
    says matches a saved meal name (be liberal — "my breakfast", "the wrap", etc.), call
@@ -219,11 +219,11 @@ def build_mcp(usda_getter) -> FastMCP:
             client_secret=settings.github_client_secret,
             base_url=settings.public_base_url.rstrip("/"),
         )
-        mcp = FastMCP(name="nutrition", instructions=WORKFLOW_INSTRUCTIONS, auth=auth_provider)
+        mcp = FastMCP(name="diet", instructions=WORKFLOW_INSTRUCTIONS, auth=auth_provider)
         if settings.allowed_github_users_set:
             mcp.add_middleware(GitHubAllowlistMiddleware(settings.allowed_github_users_set))
     else:
-        mcp = FastMCP(name="nutrition", instructions=WORKFLOW_INSTRUCTIONS)
+        mcp = FastMCP(name="diet", instructions=WORKFLOW_INSTRUCTIONS)
         mcp.add_middleware(ApiKeyMiddleware(settings.api_key))
 
     user_key = settings.default_user_key

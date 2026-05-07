@@ -8,7 +8,7 @@ from dietracker_server.models import USDAFoodResult, USDASearchResponse
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
-# Summary: Proxies USDA food search and returns normalized nutrition records.
+# Summary: Proxies USDA food search and returns normalized diet records.
 # Parameters:
 # - query (str): Search phrase sent to USDA FoodData Central.
 # - limit (int): Maximum number of food matches to return.

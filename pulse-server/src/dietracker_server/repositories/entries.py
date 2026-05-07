@@ -56,7 +56,7 @@ class EntriesRepository:
 
     # Summary: Derives a deterministic daily log UUID using user key and log date.
     # Parameters:
-    # - user_key (str): Unique user identifier owning the nutrition log.
+    # - user_key (str): Unique user identifier owning the diet log.
     # - log_date (DateValue): Date associated with the daily log identifier.
     # Returns:
     # - str: UUID5 string derived from user key and date.

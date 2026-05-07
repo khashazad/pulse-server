@@ -63,7 +63,7 @@ mcp = build_mcp(get_usda_client)
 mcp_app = mcp.http_app(path="/")
 
 app = FastAPI(
-    title="Nutrition Server",
+    title="Diet Server",
     version="0.1.0",
     lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
 )
