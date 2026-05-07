@@ -128,7 +128,7 @@ Each screen has three states:
 - **Error** → `ContentUnavailableView` with short message + "Retry" button. `.unauthorized` adds "Open Settings"; `.notConfigured` opens Settings directly.
 - **Empty** (no entries logged yet) → `ContentUnavailableView("No entries logged", systemImage: "fork.knife")`.
 
-**Special case — no targets set:** `/summary/{date}` returns 404 if no target profile exists. Today/DayDetail handle this by showing macro totals only (no rings/remaining), with a small banner: "Set targets in the server to see goals."
+**Special case — no targets set:** `/summary/{date}` returns 404 if no target profile exists for the user. The server returns no entries in that response either, so we treat 404 as a friendly empty state on Today/DayDetail: a `ContentUnavailableView` with the message "Set targets in the server to start tracking" and a Retry button. (A future enhancement could fall back to `/entries?date=` to render entries-without-goals; YAGNI for v1.)
 
 No retry logic, no offline cache. Pull-to-refresh is the user's retry.
 
