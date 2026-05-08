@@ -3,11 +3,10 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppSettings.self) private var settings
 
-    @State private var tab: DockTab = .today
-    @State private var todayPath = NavigationPath()
-    @State private var weekPath = NavigationPath()
+    @State private var tab: DockTab = .log
+    @State private var logPath = NavigationPath()
+    @State private var mealsPath = NavigationPath()
     @State private var showSettings = false
-    @State private var showDatePicker = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -15,38 +14,35 @@ struct RootView: View {
 
             Group {
                 switch tab {
-                case .today:
-                    NavigationStack(path: $todayPath) {
-                        DayMacroView(date: Date())
-                            .toolbar { settingsButton }
-                            .navigationDestination(for: Date.self) { date in
-                                DayMacroView(date: date)
-                                    .toolbar { settingsButton }
-                            }
+                case .log:
+                    NavigationStack(path: $logPath) {
+                        LogView(onOpenDate: { picked in
+                            logPath.append(picked)
+                        })
+                        .toolbar { settingsButton }
+                        .navigationDestination(for: Date.self) { date in
+                            DayMacroView(date: date)
+                                .toolbar { settingsButton }
+                        }
                     }
-                case .week:
-                    NavigationStack(path: $weekPath) {
-                        WeekView()
-                            .toolbar { settingsButton }
+                case .meals:
+                    NavigationStack(path: $mealsPath) {
+                        MealsView(onOpen: { summary in
+                            mealsPath.append(summary)
+                        })
+                        .toolbar { settingsButton }
+                        .navigationDestination(for: MealSummary.self) { summary in
+                            MealDetailView(summary: summary)
+                                .toolbar { settingsButton }
+                        }
                     }
-                case .date:
-                    Color.clear.onAppear { tab = .today }
                 }
             }
 
             if dockVisible {
-                FloatingDock(
-                    tab: $tab,
-                    onPickDate: { showDatePicker = true }
-                )
-                .padding(.horizontal, 32)
-                .padding(.bottom, 16)
-            }
-        }
-        .sheet(isPresented: $showDatePicker) {
-            DatePickerSheet { picked in
-                tab = .today
-                todayPath.append(picked)
+                FloatingDock(tab: $tab)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 16)
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -59,9 +55,8 @@ struct RootView: View {
 
     private var dockVisible: Bool {
         switch tab {
-        case .today: todayPath.isEmpty
-        case .week:  weekPath.isEmpty
-        case .date:  true
+        case .log:   logPath.isEmpty
+        case .meals: mealsPath.isEmpty
         }
     }
 

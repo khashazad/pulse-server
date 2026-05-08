@@ -1,23 +1,16 @@
 import SwiftUI
 
 enum DockTab: Hashable {
-    case today, week, date
+    case log, meals
 }
 
 struct FloatingDock: View {
     @Binding var tab: DockTab
-    let onPickDate: () -> Void
 
     var body: some View {
         HStack(spacing: 4) {
-            tabButton(.today, system: "circle.fill",    label: "Today")
-            tabButton(.week,  system: "chart.bar.fill", label: "Week")
-            Button {
-                onPickDate()
-            } label: {
-                tabContents(system: "calendar", label: "Date", isActive: tab == .date)
-            }
-            .buttonStyle(.plain)
+            tabButton(.log,   system: "circle.fill",     label: "Log")
+            tabButton(.meals, system: "fork.knife",      label: "Meals")
         }
         .padding(6)
         .background(
@@ -70,12 +63,12 @@ struct FloatingDock: View {
 }
 
 #Preview {
-    @Previewable @State var tab: DockTab = .today
+    @Previewable @State var tab: DockTab = .log
     ZStack {
         Theme.BG.primary.ignoresSafeArea()
         VStack {
             Spacer()
-            FloatingDock(tab: $tab, onPickDate: {})
+            FloatingDock(tab: $tab)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)
         }
