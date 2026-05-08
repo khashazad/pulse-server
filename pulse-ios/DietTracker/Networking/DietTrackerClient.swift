@@ -31,6 +31,17 @@ actor DietTrackerClient {
         return try await fetch(url: url)
     }
 
+    func meals() async throws -> [MealSummary] {
+        let url = try makeURL(path: "/meals", query: [URLQueryItem(name: "user_key", value: Constants.userKey)])
+        let envelope: MealsListResponse = try await fetch(url: url)
+        return envelope.meals
+    }
+
+    func meal(id: UUID) async throws -> Meal {
+        let url = try makeURL(path: "/meals/\(id.uuidString.lowercased())", query: [URLQueryItem(name: "user_key", value: Constants.userKey)])
+        return try await fetch(url: url)
+    }
+
     // MARK: - private
 
     private func makeURL(path: String, query: [URLQueryItem]) throws -> URL {
