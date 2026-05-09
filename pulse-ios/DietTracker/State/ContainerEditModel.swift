@@ -41,7 +41,7 @@ final class ContainerEditModel {
 
     func save() async {
         guard let client = auth?.makeClient(), let weight = Double(tareWeightText) else {
-            error = .notConfigured
+            error = .notSignedIn
             return
         }
         saving = true; defer { saving = false }

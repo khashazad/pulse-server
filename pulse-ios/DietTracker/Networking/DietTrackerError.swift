@@ -1,7 +1,7 @@
 import Foundation
 
 enum DietTrackerError: Error, Equatable {
-    case notConfigured
+    case notSignedIn
     case unauthorized
     case notFound
     case payloadTooLarge
@@ -13,7 +13,7 @@ enum DietTrackerError: Error, Equatable {
 
     static func == (lhs: DietTrackerError, rhs: DietTrackerError) -> Bool {
         switch (lhs, rhs) {
-        case (.notConfigured, .notConfigured),
+        case (.notSignedIn, .notSignedIn),
              (.unauthorized, .unauthorized),
              (.notFound, .notFound),
              (.payloadTooLarge, .payloadTooLarge),
@@ -34,7 +34,7 @@ enum DietTrackerError: Error, Equatable {
 
     var userMessage: String {
         switch self {
-        case .notConfigured:    return "Set the server URL and API key in Settings."
+        case .notSignedIn:      return "Sign in to continue."
         case .unauthorized:     return "Sign in again."
         case .notFound:         return "No data for this date."
         case .payloadTooLarge:  return "That image is too large. Try a smaller photo."

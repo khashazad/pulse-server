@@ -13,7 +13,7 @@ final class YearModel {
 
     func loadCurrentYear(today: Date = Date()) async {
         guard let client = auth?.makeClient() else {
-            state = .failed(.notConfigured)
+            state = .failed(.notSignedIn)
             return
         }
         let cal = Calendar.current

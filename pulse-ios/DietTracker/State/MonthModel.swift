@@ -13,7 +13,7 @@ final class MonthModel {
 
     func loadCurrentMonth(today: Date = Date()) async {
         guard let client = auth?.makeClient() else {
-            state = .failed(.notConfigured)
+            state = .failed(.notSignedIn)
             return
         }
         let cal = Calendar.current

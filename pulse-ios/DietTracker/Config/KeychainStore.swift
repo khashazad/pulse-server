@@ -53,18 +53,5 @@ enum KeychainStore {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
-    // Legacy convenience used by AppSettings until the cutover task removes it.
-    static func read() -> String? {
-        read(service: Constants.Keychain.service, account: Constants.Keychain.account)
-    }
 
-    @discardableResult
-    static func write(_ value: String) -> Bool {
-        write(value, service: Constants.Keychain.service, account: Constants.Keychain.account)
-    }
-
-    @discardableResult
-    static func delete() -> Bool {
-        delete(service: Constants.Keychain.service, account: Constants.Keychain.account)
-    }
 }

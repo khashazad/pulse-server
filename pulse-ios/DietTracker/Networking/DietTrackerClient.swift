@@ -134,10 +134,10 @@ actor DietTrackerClient {
 
     private func makeURL(path: String, query: [URLQueryItem]) throws -> URL {
         guard var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
-            throw DietTrackerError.notConfigured
+            throw DietTrackerError.notSignedIn
         }
         comps.queryItems = query.isEmpty ? nil : query
-        guard let url = comps.url else { throw DietTrackerError.notConfigured }
+        guard let url = comps.url else { throw DietTrackerError.notSignedIn }
         return url
     }
 

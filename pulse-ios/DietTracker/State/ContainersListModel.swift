@@ -12,7 +12,7 @@ final class ContainersListModel {
 
     func load() async {
         guard let client = auth?.makeClient() else {
-            state = .failed(.notConfigured)
+            state = .failed(.notSignedIn)
             return
         }
         state = .loading

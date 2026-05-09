@@ -1,8 +1,6 @@
 import Foundation
 
 enum Constants {
-    static let userKey = "khash"   // removed in cleanup task
-
     static let baseURL: URL = {
         guard
             let raw = Bundle.main.object(forInfoDictionaryKey: "BaseURL") as? String,
@@ -14,18 +12,15 @@ enum Constants {
         return url
     }()
 
-    enum Defaults {
-        static let baseURL = "diettracker.baseURL"   // removed in cleanup task
-    }
-
     enum Keychain {
-        // Legacy API-key item (cleanup task removes references and proactively deletes the item once on launch).
-        static let service = "com.khxsh.diettracker.apikey"
-        static let account = "default"
-
-        // New session blob written by AuthSession.
         static let sessionService = "com.khxsh.diettracker.session"
         static let sessionAccount = "default"
+
+        // Legacy API-key item identifiers, kept here ONLY so a one-shot deletion
+        // in AuthSession.init can clean up old installs. Reference is removed in
+        // the next release.
+        static let legacyService = "com.khxsh.diettracker.apikey"
+        static let legacyAccount = "default"
     }
 
     enum Auth {

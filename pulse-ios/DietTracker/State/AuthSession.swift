@@ -40,6 +40,11 @@ final class AuthSession {
         } else {
             self.state = .signedOut
         }
+        // One-shot cleanup of the previous API-key Keychain item; safe if absent.
+        _ = KeychainStore.delete(
+            service: Constants.Keychain.legacyService,
+            account: Constants.Keychain.legacyAccount
+        )
     }
 
     func handleSignInCallback(url: URL) {
