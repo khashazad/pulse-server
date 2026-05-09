@@ -159,3 +159,13 @@ begin
   end if;
 end
 $body$;
+
+create table if not exists sessions (
+  token_hash    bytea primary key,
+  email         text not null,
+  created_at    timestamptz not null default now(),
+  last_used_at  timestamptz not null default now(),
+  expires_at    timestamptz not null
+);
+create index if not exists idx_sessions_email on sessions (email);
+create index if not exists idx_sessions_expires_at on sessions (expires_at);

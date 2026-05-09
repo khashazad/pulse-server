@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     Numeric,
     Table,
@@ -182,4 +183,16 @@ food_entries = Table(
     Index("idx_food_entries_user_key", "user_key"),
     Index("idx_food_entries_daily_log_id_consumed_at", "daily_log_id", "consumed_at"),
     Index("idx_food_entries_custom_food_id", "custom_food_id"),
+)
+
+sessions = Table(
+    "sessions",
+    metadata,
+    Column("token_hash", LargeBinary, primary_key=True),
+    Column("email", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("last_used_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Index("idx_sessions_email", "email"),
+    Index("idx_sessions_expires_at", "expires_at"),
 )
