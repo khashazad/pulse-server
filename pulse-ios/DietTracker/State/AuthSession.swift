@@ -28,6 +28,10 @@ final class AuthSession {
     /// Holds the in-flight ASWebAuthenticationSession so it isn't deallocated
     /// before the system delivers the callback URL.
     private var activeWebAuthSession: ASWebAuthenticationSession?
+    /// `presentationContextProvider` on ASWebAuthenticationSession is `weak`,
+    /// so the provider must be retained somewhere or it gets deallocated
+    /// before `start()` and ASWebAuth refuses to present.
+    private var activeWebAuthContextProvider: ASWebAuthenticationPresentationContextProviding?
 
     init(
         baseURL: URL,
@@ -158,8 +162,12 @@ extension AuthSession {
             handleSignInCallback(url: callback)
         } catch let asError as ASWebAuthenticationSessionError where asError.code == .canceledLogin {
             state = .signedOut
+        } catch let asError as ASWebAuthenticationSessionError {
+            state = .error(.signInFailed(reason: "aswebauth_\(asError.code.rawValue)"))
+        } catch let dtError as DietTrackerError {
+            state = .error(dtError)
         } catch {
-            state = .error(.signInFailed(reason: "invalid_callback"))
+            state = .error(.signInFailed(reason: "unknown:\(String(describing: type(of: error)))"))
         }
     }
 
@@ -182,6 +190,7 @@ extension AuthSession {
                 guard !didResume else { return }
                 didResume = true
                 self?.activeWebAuthSession = nil
+                self?.activeWebAuthContextProvider = nil
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else if let callback = callback {
@@ -190,14 +199,20 @@ extension AuthSession {
                     continuation.resume(throwing: DietTrackerError.signInFailed(reason: "invalid_callback"))
                 }
             }
-            session.presentationContextProvider = SignInPresentationContextProvider(anchor: presentationAnchor)
+            // Retain BOTH the session and its presentation-context provider —
+            // ASWebAuthenticationSession.presentationContextProvider is `weak`,
+            // so an inline allocation gets deallocated before `start()` runs.
+            let provider = SignInPresentationContextProvider(anchor: presentationAnchor)
+            session.presentationContextProvider = provider
             session.prefersEphemeralWebBrowserSession = false
             self.activeWebAuthSession = session
+            self.activeWebAuthContextProvider = provider
             if !session.start() {
                 guard !didResume else { return }
                 didResume = true
                 self.activeWebAuthSession = nil
-                continuation.resume(throwing: DietTrackerError.signInFailed(reason: "invalid_callback"))
+                self.activeWebAuthContextProvider = nil
+                continuation.resume(throwing: DietTrackerError.signInFailed(reason: "session_start_returned_false"))
             }
         }
     }
