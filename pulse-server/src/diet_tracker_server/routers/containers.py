@@ -4,7 +4,7 @@ from datetime import datetime as DateTimeValue
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,28 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 TZ = ZoneInfo(settings.timezone)
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+_UPLOAD_CHUNK_BYTES = 64 * 1024
+
+
+async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
+    """Read an UploadFile in chunks, aborting once cumulative bytes exceed max_bytes.
+
+    Avoids allocating an oversized payload before the size cap is enforced.
+    Raises PhotoTooLargeError when the upload exceeds the cap.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise PhotoTooLargeError(
+                f"Upload exceeds {max_bytes}-byte cap (read at least {total})"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _to_response(row: dict) -> ContainerResponse:
@@ -134,12 +156,33 @@ async def delete_container(
 @router.put("/containers/{container_id}/photo", response_model=ContainerPhotoStatus)
 async def upload_container_photo(
     container_id: UUID,
+    request: Request,
     file: UploadFile = File(...),
     user_key: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session_dependency),
 ) -> ContainerPhotoStatus:
     effective = user_key or settings.default_user_key
-    raw = await file.read()
+
+    # Pre-flight when Content-Length is advertised. We still enforce the cap
+    # during the streamed read below, so this is purely an early-out for
+    # well-behaved clients; anyone omitting/lying about the header still hits
+    # the streaming check.
+    advertised = request.headers.get("content-length")
+    if advertised is not None:
+        try:
+            if int(advertised) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Upload exceeds {MAX_UPLOAD_BYTES}-byte cap",
+                )
+        except ValueError:
+            pass
+
+    try:
+        raw = await _read_capped(file, MAX_UPLOAD_BYTES)
+    except PhotoTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+
     try:
         full, thumb, mime = process_container_photo(raw, max_bytes=MAX_UPLOAD_BYTES)
     except PhotoTooLargeError as exc:
