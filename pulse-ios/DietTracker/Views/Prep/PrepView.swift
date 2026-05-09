@@ -12,7 +12,7 @@ struct PrepView: View {
             Section("Container") {
                 Button { showPicker = true } label: {
                     HStack {
-                        if let c = selected {
+                        if let c = model.selectedContainer {
                             Text(c.name)
                             Spacer()
                             Text("\(Int(c.tareWeightG.rounded())) g")
@@ -62,35 +62,49 @@ struct PrepView: View {
         .sheet(isPresented: $showManager) {
             ContainersListView()
                 .environment(settings)
-                .onDisappear { Task { await listModel?.load() } }
+                .onDisappear {
+                    Task {
+                        await listModel?.load()
+                        reconcileSelection()
+                    }
+                }
         }
         .task {
             if listModel == nil { listModel = ContainersListModel(settings: settings) }
             await listModel?.load()
             applyLastUsedIfNeeded()
+            reconcileSelection()
         }
     }
 
-    private var selected: Container? {
-        guard let id = model.selectedContainerId,
-              case .loaded(let list) = listModel?.state ?? .idle else { return nil }
-        return list.first(where: { $0.id == id })
-    }
-
     private func applyPick(_ c: Container) {
-        model.selectedContainerId = c.id
-        model.tareWeightG = c.tareWeightG
+        model.selectedContainer = c
         UserDefaults.standard.set(c.id.uuidString, forKey: "prep.lastContainerId")
     }
 
     private func applyLastUsedIfNeeded() {
-        guard model.selectedContainerId == nil,
+        guard model.selectedContainer == nil,
               let raw = UserDefaults.standard.string(forKey: "prep.lastContainerId"),
               let id = UUID(uuidString: raw),
               case .loaded(let list) = listModel?.state ?? .idle,
               let match = list.first(where: { $0.id == id })
         else { return }
         applyPick(match)
+    }
+
+    /// Re-fetch the selected container from the most recently loaded list so
+    /// edits propagate (e.g. tare changed in the manager) and deletions clear
+    /// the selection. Without this, `selectedContainer` keeps pointing at a
+    /// stale snapshot and the math would silently use an outdated tare.
+    private func reconcileSelection() {
+        guard let current = model.selectedContainer else { return }
+        guard case .loaded(let list) = listModel?.state ?? .idle else { return }
+        if let fresh = list.first(where: { $0.id == current.id }) {
+            if fresh != current { model.selectedContainer = fresh }
+        } else {
+            model.selectedContainer = nil
+            UserDefaults.standard.removeObject(forKey: "prep.lastContainerId")
+        }
     }
 
     @ViewBuilder
