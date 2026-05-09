@@ -60,6 +60,7 @@ final class ContainerEditModel {
             savedContainerId = saved.id
             error = nil
         } catch let e as DietTrackerError {
+            if e == .unauthorized { auth?.handleUnauthorized() }
             error = e
         } catch {
             self.error = .server(status: -1)

@@ -31,6 +31,7 @@ final class YearModel {
             self.targets = (try? await summaryTask)?.target
             state = .loaded(logs)
         } catch let error as DietTrackerError {
+            if error == .unauthorized { auth?.handleUnauthorized() }
             state = .failed(error)
         } catch {
             state = .failed(.server(status: -1))

@@ -28,7 +28,7 @@ final class ContainerClientTests: XCTestCase {
         super.tearDown()
     }
 
-    func testListContainersSendsApiKeyAndUserKey() async throws {
+    func testListContainersSendsBearerAndNoUserKey() async throws {
         let json = try loadFixture("containers")
         var captured: URLRequest?
         StubURLProtocol.responder = { req in
@@ -130,7 +130,7 @@ final class ContainerClientTests: XCTestCase {
         }
     }
 
-    func testContainerPhotoRequestIncludesApiKey() {
+    func testContainerPhotoRequestIncludesBearer() {
         let id = UUID()
         let req = makeClient().containerPhotoRequest(id: id, size: .thumb)
         XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer session-k")

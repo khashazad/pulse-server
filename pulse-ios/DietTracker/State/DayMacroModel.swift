@@ -22,6 +22,7 @@ final class DayMacroModel {
             let summary = try await client.summary(date: date)
             state = .loaded(summary)
         } catch let error as DietTrackerError {
+            if error == .unauthorized { auth?.handleUnauthorized() }
             state = .failed(error)
         } catch {
             state = .failed(.server(status: -1))

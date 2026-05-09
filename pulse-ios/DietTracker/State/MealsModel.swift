@@ -20,6 +20,7 @@ final class MealsModel {
             let meals = try await client.meals()
             state = .loaded(meals)
         } catch let error as DietTrackerError {
+            if error == .unauthorized { auth?.handleUnauthorized() }
             state = .failed(error)
         } catch {
             state = .failed(.server(status: -1))
@@ -48,6 +49,7 @@ final class MealDetailModel {
             let fresh = try await client.meal(id: mealId)
             state = .loaded(fresh)
         } catch let error as DietTrackerError {
+            if error == .unauthorized { auth?.handleUnauthorized() }
             if case .loaded = state { return }
             state = .failed(error)
         } catch {

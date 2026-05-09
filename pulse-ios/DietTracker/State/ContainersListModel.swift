@@ -20,6 +20,7 @@ final class ContainersListModel {
             let containers = try await client.listContainers()
             state = .loaded(containers)
         } catch let error as DietTrackerError {
+            if error == .unauthorized { auth?.handleUnauthorized() }
             state = .failed(error)
         } catch {
             state = .failed(.server(status: -1))
