@@ -154,3 +154,16 @@ async def test_clear_photo(session: AsyncSession) -> None:
     async with transaction(session):
         await repo.clear_photo(row["id"], "khash", _now())
     assert await repo.get_photo(row["id"], "khash", thumb=False) is None
+
+
+@pytest.mark.asyncio
+async def test_set_then_get_photo_round_trip(session: AsyncSession) -> None:
+    """End-to-end: set bytes, fetch them, confirm content matches."""
+    repo = ContainersRepository(session)
+    async with transaction(session):
+        row = await repo.create("khash", "RT", "rt", 50.0, _now())
+        await repo.set_photo(row["id"], "khash", b"\x89PNG-FULL", b"\x89PNG-THUMB", "image/jpeg", _now())
+    full = await repo.get_photo(row["id"], "khash", thumb=False)
+    thumb = await repo.get_photo(row["id"], "khash", thumb=True)
+    assert full == (b"\x89PNG-FULL", "image/jpeg")
+    assert thumb == (b"\x89PNG-THUMB", "image/jpeg")
