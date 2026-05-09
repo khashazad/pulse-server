@@ -3,52 +3,79 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppSettings.self) private var settings
 
-    @State private var tab: DockTab = .today
-    @State private var path = NavigationPath()
+    @State private var tab: DockTab = .log
+    @State private var logPath = NavigationPath()
+    @State private var mealsPath = NavigationPath()
+    @State private var prepPath = NavigationPath()
     @State private var showSettings = false
-    @State private var showDatePicker = false
 
     var body: some View {
-        NavigationStack(path: $path) {
-            content
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "gearshape")
+        ZStack(alignment: .bottom) {
+            Theme.BG.primary.ignoresSafeArea()
+
+            Group {
+                switch tab {
+                case .log:
+                    NavigationStack(path: $logPath) {
+                        LogView(onOpenDate: { picked in
+                            logPath.append(picked)
+                        })
+                        .toolbar { settingsButton }
+                        .navigationDestination(for: Date.self) { date in
+                            DayMacroView(date: date)
+                                .toolbar { settingsButton }
                         }
                     }
+                case .meals:
+                    NavigationStack(path: $mealsPath) {
+                        MealsView(onOpen: { summary in
+                            mealsPath.append(summary)
+                        })
+                        .toolbar { settingsButton }
+                        .navigationDestination(for: MealSummary.self) { summary in
+                            MealDetailView(summary: summary)
+                                .toolbar { settingsButton }
+                        }
+                    }
+                case .prep:
+                    NavigationStack(path: $prepPath) {
+                        PrepView()
+                            .toolbar { settingsButton }
+                    }
                 }
-                .navigationDestination(for: Date.self) { date in
-                    DayMacroView(date: date)
-                }
-        }
-        .overlay(alignment: .bottom) {
-            if path.isEmpty {
-                FloatingDock(tab: $tab, onPickDate: { showDatePicker = true })
             }
-        }
-        .sheet(isPresented: $showDatePicker) {
-            DatePickerSheet { picked in
-                path.append(picked)
+
+            if dockVisible {
+                FloatingDock(tab: $tab)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 16)
             }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(requireConfig: false)
         }
-        // Auto-present settings if not configured
         .sheet(isPresented: .constant(!settings.isConfigured && !showSettings)) {
             SettingsView(requireConfig: true)
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    private var dockVisible: Bool {
         switch tab {
-        case .today: DayMacroView(date: Date())
-        case .week:  WeekView()
-        case .prep:  PrepView()
+        case .log:   logPath.isEmpty
+        case .meals: mealsPath.isEmpty
+        case .prep:  prepPath.isEmpty
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var settingsButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape")
+                    .foregroundStyle(Theme.CTP.mauve)
+            }
         }
     }
 }

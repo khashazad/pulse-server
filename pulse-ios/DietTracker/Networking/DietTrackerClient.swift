@@ -13,7 +13,7 @@ actor DietTrackerClient {
         self.decoder = JSONDecoder.dietTrackerDefault()
     }
 
-    // MARK: - existing read endpoints
+    // MARK: - read endpoints
 
     func summary(date: Date) async throws -> DailySummary {
         let path = "/summary/\(DateOnly.string(from: date))"
@@ -29,6 +29,23 @@ actor DietTrackerClient {
                 URLQueryItem(name: "to", value: DateOnly.string(from: to)),
                 URLQueryItem(name: "user_key", value: Constants.userKey),
             ]
+        )
+        return try await fetch(url: url)
+    }
+
+    func meals() async throws -> [MealSummary] {
+        let url = try makeURL(
+            path: "/meals",
+            query: [URLQueryItem(name: "user_key", value: Constants.userKey)]
+        )
+        let envelope: MealsListResponse = try await fetch(url: url)
+        return envelope.meals
+    }
+
+    func meal(id: UUID) async throws -> Meal {
+        let url = try makeURL(
+            path: "/meals/\(id.uuidString.lowercased())",
+            query: [URLQueryItem(name: "user_key", value: Constants.userKey)]
         )
         return try await fetch(url: url)
     }
