@@ -92,6 +92,15 @@ final class AuthSession {
         state = .signedOut
     }
 
+    func makeClient() -> DietTrackerClient? {
+        guard let token = storedToken else { return nil }
+        return DietTrackerClient(baseURL: baseURL, sessionToken: token, session: urlSession)
+    }
+
+    func startSignInURL() -> URL {
+        baseURL.appendingPathComponent(Constants.Auth.startPath)
+    }
+
     // MARK: - storage
 
     private struct StoredSession: Codable {
@@ -123,5 +132,61 @@ final class AuthSession {
 
     fileprivate var storedToken: String? {
         Self.readStored(service: keychainService, account: keychainAccount)?.token
+    }
+}
+
+import AuthenticationServices
+
+@MainActor
+extension AuthSession {
+    func signInWithGoogle(presentationAnchor: ASPresentationAnchor) async {
+        state = .signingIn
+        let url = startSignInURL()
+        do {
+            let callback = try await Self.startWebAuth(
+                url: url,
+                callbackScheme: Constants.Auth.callbackScheme,
+                presentationAnchor: presentationAnchor
+            )
+            handleSignInCallback(url: callback)
+        } catch let asError as ASWebAuthenticationSessionError where asError.code == .canceledLogin {
+            state = .signedOut
+        } catch {
+            state = .error(.signInFailed(reason: "invalid_callback"))
+        }
+    }
+
+    private static func startWebAuth(
+        url: URL,
+        callbackScheme: String,
+        presentationAnchor: ASPresentationAnchor
+    ) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(
+                url: url,
+                callbackURLScheme: callbackScheme
+            ) { callback, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else if let callback = callback {
+                    continuation.resume(returning: callback)
+                } else {
+                    continuation.resume(throwing: DietTrackerError.signInFailed(reason: "invalid_callback"))
+                }
+            }
+            session.presentationContextProvider = SignInPresentationContextProvider(anchor: presentationAnchor)
+            session.prefersEphemeralWebBrowserSession = false
+            if !session.start() {
+                continuation.resume(throwing: DietTrackerError.signInFailed(reason: "invalid_callback"))
+            }
+        }
+    }
+}
+
+private final class SignInPresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private let anchor: ASPresentationAnchor
+    init(anchor: ASPresentationAnchor) { self.anchor = anchor }
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        anchor
     }
 }

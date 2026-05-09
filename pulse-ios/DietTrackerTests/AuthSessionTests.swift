@@ -209,3 +209,35 @@ extension AuthSessionTests {
         StubURLProtocol.responder = nil
     }
 }
+
+extension AuthSessionTests {
+    func testMakeClientNilWhenSignedOut() {
+        clearStoredSession()
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount
+        )
+        XCTAssertNil(auth.makeClient())
+    }
+
+    func testMakeClientNonNilWhenSignedIn() {
+        writeStoredSession(token: "tok", email: "khashzd@gmail.com")
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount
+        )
+        XCTAssertNotNil(auth.makeClient())
+    }
+
+    func testStartSignInURLBuildsCorrectly() {
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount
+        )
+        let url = auth.startSignInURL()
+        XCTAssertEqual(url.absoluteString, "https://example.test/auth/google/start")
+    }
+}
