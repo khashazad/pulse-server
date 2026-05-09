@@ -28,6 +28,10 @@ final class AuthSession {
     /// Holds the in-flight ASWebAuthenticationSession so it isn't deallocated
     /// before the system delivers the callback URL.
     private var activeWebAuthSession: ASWebAuthenticationSession?
+    /// `presentationContextProvider` on ASWebAuthenticationSession is `weak`,
+    /// so the provider must be retained somewhere or it gets deallocated
+    /// before `start()` and ASWebAuth refuses to present.
+    private var activeWebAuthContextProvider: ASWebAuthenticationPresentationContextProviding?
 
     init(
         baseURL: URL,
@@ -192,6 +196,7 @@ extension AuthSession {
                 guard !didResume else { return }
                 didResume = true
                 self?.activeWebAuthSession = nil
+                self?.activeWebAuthContextProvider = nil
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else if let callback = callback {
@@ -200,15 +205,21 @@ extension AuthSession {
                     continuation.resume(throwing: DietTrackerError.signInFailed(reason: "invalid_callback"))
                 }
             }
-            session.presentationContextProvider = SignInPresentationContextProvider(anchor: presentationAnchor)
+            // Retain BOTH the session and its presentation-context provider —
+            // ASWebAuthenticationSession.presentationContextProvider is `weak`,
+            // so an inline allocation gets deallocated before `start()` runs.
+            let provider = SignInPresentationContextProvider(anchor: presentationAnchor)
+            session.presentationContextProvider = provider
             session.prefersEphemeralWebBrowserSession = false
             self.activeWebAuthSession = session
+            self.activeWebAuthContextProvider = provider
             print("[AuthSession] starting ASWebAuthenticationSession (canStart=\(session.canStart))")
             if !session.start() {
                 print("[AuthSession] session.start() returned false")
                 guard !didResume else { return }
                 didResume = true
                 self.activeWebAuthSession = nil
+                self.activeWebAuthContextProvider = nil
                 continuation.resume(throwing: DietTrackerError.signInFailed(reason: "session_start_returned_false"))
             }
         }
