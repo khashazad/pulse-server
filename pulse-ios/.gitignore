@@ -4,6 +4,9 @@
 # Claude Code per-session state
 .claude/
 
+# Per-developer direnv env (DIET_TRACKER_BASE_URL etc.)
+.envrc
+
 # Xcode
 xcuserdata/
 *.xcuserstate
