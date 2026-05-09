@@ -165,3 +165,49 @@ def test_callback_missing_code_redirects_invalid_callback(client):
     )
     assert r.status_code == 302
     assert "error=invalid_callback" in r.headers["location"]
+
+
+def test_whoami_unauthenticated_returns_401(client):
+    r = client.get("/auth/whoami")
+    assert r.status_code == 401
+
+
+def test_whoami_returns_email_and_expires_at(client):
+    from datetime import datetime as DT, timezone as TZ, timedelta as TD
+    fut = DT.now(TZ.utc) + TD(days=7)
+    fake_repo = AsyncMock()
+    fake_repo.get.return_value = {"email": "khashzd@gmail.com", "expires_at": fut}
+    fake_repo.slide.return_value = 1
+
+    fake_session = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__.return_value = fake_session
+    ctx.__aexit__.return_value = None
+    with patch("diet_tracker_server.auth.middleware.get_session", return_value=ctx), \
+         patch("diet_tracker_server.auth.middleware.SessionsRepository", return_value=fake_repo):
+        r = client.get("/auth/whoami", headers={"Authorization": "Bearer tok"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["email"] == "khashzd@gmail.com"
+    assert "expires_at" in body
+
+
+def test_logout_deletes_session_and_returns_204(client):
+    from datetime import datetime as DT, timezone as TZ, timedelta as TD
+    fut = DT.now(TZ.utc) + TD(days=7)
+    fake_repo = AsyncMock()
+    fake_repo.get.return_value = {"email": "u@e.com", "expires_at": fut}
+    fake_repo.slide.return_value = 1
+    fake_repo.delete.return_value = 1
+
+    fake_session = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__.return_value = fake_session
+    ctx.__aexit__.return_value = None
+    with patch("diet_tracker_server.auth.middleware.get_session", return_value=ctx), \
+         patch("diet_tracker_server.auth.middleware.SessionsRepository", return_value=fake_repo), \
+         patch("diet_tracker_server.routers.auth.get_session", return_value=ctx), \
+         patch("diet_tracker_server.routers.auth.SessionsRepository", return_value=fake_repo):
+        r = client.post("/auth/logout", headers={"Authorization": "Bearer tok"})
+    assert r.status_code == 204
+    fake_repo.delete.assert_awaited()

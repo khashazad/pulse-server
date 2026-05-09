@@ -5,9 +5,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, Cookie, Request
+from fastapi import APIRouter, Cookie, Depends, Request
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
+from diet_tracker_server.auth import require_session
 from diet_tracker_server.auth.google import (
     GoogleAuthError,
     build_authorize_url,
@@ -147,3 +149,40 @@ async def google_callback(
         await db_session.commit()
 
     return _app_redirect(token=token, email=email)
+
+
+class WhoamiResponse(BaseModel):
+    email: str
+    expires_at: datetime
+
+
+# Summary: Returns the authenticated session's identity and post-slide expiry.
+# Parameters:
+# - request (Request): Active request whose state was populated by the middleware.
+# Returns:
+# - WhoamiResponse: Email and expires_at after the session slide.
+# Raises/Throws:
+# - HTTPException(401): When no session is attached (handled by `require_session`).
+@router.get("/whoami", response_model=WhoamiResponse, dependencies=[Depends(require_session)])
+async def whoami(request: Request) -> WhoamiResponse:
+    return WhoamiResponse(
+        email=request.state.email,
+        expires_at=request.state.session_expires_at,
+    )
+
+
+# Summary: Deletes the current session row and returns 204.
+# Parameters:
+# - request (Request): Active request used to extract the Bearer token.
+# Returns:
+# - None: HTTP 204 with no body.
+# Raises/Throws:
+# - HTTPException(401): When no session is attached (handled by `require_session`).
+@router.post("/logout", status_code=204, dependencies=[Depends(require_session)])
+async def logout(request: Request) -> None:
+    header = request.headers.get("authorization", "")
+    token = header[7:].strip()
+    async with get_session() as db_session:
+        repo = SessionsRepository(db_session)
+        await repo.delete(hash_token(token))
+        await db_session.commit()

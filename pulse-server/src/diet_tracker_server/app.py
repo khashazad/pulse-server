@@ -76,6 +76,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from diet_tracker_server.auth import SessionAuthMiddleware, UserKeyGuardrailMiddleware
+app.add_middleware(SessionAuthMiddleware)
+app.add_middleware(UserKeyGuardrailMiddleware)
+
 
 # Summary: Returns a simple health status payload for service monitoring.
 # Parameters:

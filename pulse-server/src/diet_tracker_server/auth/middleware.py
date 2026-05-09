@@ -12,8 +12,10 @@ from diet_tracker_server.db import get_session
 from diet_tracker_server.repositories.sessions import SessionsRepository
 
 
-# Paths that bypass auth + guardrail. /auth/* handles its own credential lifecycle.
+# Paths that bypass auth + guardrail. The OAuth bootstrap routes handle their own
+# credential lifecycle; /auth/whoami and /auth/logout require a valid session.
 PUBLIC_PATHS: frozenset[str] = frozenset({"/health"})
+PUBLIC_AUTH_PREFIXES: tuple[str, ...] = ("/auth/google/",)
 
 
 # Summary: Reports whether a path should bypass session auth and the user_key guardrail.
@@ -24,7 +26,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset({"/health"})
 # Raises/Throws:
 # - None: Pure string predicate.
 def _is_public(path: str) -> bool:
-    return path in PUBLIC_PATHS or path.startswith("/auth/")
+    if path in PUBLIC_PATHS:
+        return True
+    return any(path.startswith(prefix) for prefix in PUBLIC_AUTH_PREFIXES)
 
 
 class UserKeyGuardrailMiddleware(BaseHTTPMiddleware):
