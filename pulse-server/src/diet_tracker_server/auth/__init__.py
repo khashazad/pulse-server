@@ -1,1 +1,13 @@
-"""Auth package. Re-exports populated in Task 7 once middleware lands."""
+"""Auth package: session middleware, helpers, and the `require_session` dependency."""
+
+from diet_tracker_server.auth.middleware import (
+    SessionAuthMiddleware,
+    UserKeyGuardrailMiddleware,
+    require_session,
+)
+
+__all__ = [
+    "SessionAuthMiddleware",
+    "UserKeyGuardrailMiddleware",
+    "require_session",
+]
