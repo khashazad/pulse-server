@@ -78,6 +78,20 @@ final class AuthSession {
         state = .signedOut
     }
 
+    func signOut() async {
+        if let token = storedToken {
+            let client = DietTrackerClient(
+                baseURL: baseURL,
+                sessionToken: token,
+                session: urlSession
+            )
+            // Best-effort revoke; ignore any failure.
+            _ = try? await client.logout()
+        }
+        _ = clearStored()
+        state = .signedOut
+    }
+
     // MARK: - storage
 
     private struct StoredSession: Codable {

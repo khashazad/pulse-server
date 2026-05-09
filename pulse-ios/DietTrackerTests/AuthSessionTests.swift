@@ -171,3 +171,41 @@ extension AuthSessionTests {
         StubURLProtocol.responder = nil
     }
 }
+
+extension AuthSessionTests {
+    func testSignOutClearsLocalStateOn204() async {
+        writeStoredSession(token: "tok", email: "khashzd@gmail.com")
+        StubURLProtocol.responder = { req in
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount,
+            urlSession: makeStubSession()
+        )
+        await auth.signOut()
+        XCTAssertFalse(auth.isSignedIn)
+        XCTAssertNil(KeychainStore.read(service: testService, account: testAccount))
+        StubURLProtocol.responder = nil
+    }
+
+    func testSignOutClearsLocalStateOnServerError() async {
+        writeStoredSession(token: "tok", email: "khashzd@gmail.com")
+        StubURLProtocol.responder = { req in
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount,
+            urlSession: makeStubSession()
+        )
+        await auth.signOut()
+        XCTAssertFalse(auth.isSignedIn)
+        XCTAssertNil(KeychainStore.read(service: testService, account: testAccount))
+        StubURLProtocol.responder = nil
+    }
+}
