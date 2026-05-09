@@ -46,19 +46,19 @@
 Build (full):
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
 Test (all):
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Single test:
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/CLASS/method
 ```
 
@@ -133,7 +133,7 @@ final class KeychainStoreTests: XCTestCase {
 ```bash
 xcodegen generate
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/KeychainStoreTests
 ```
 
@@ -220,7 +220,7 @@ enum KeychainStore {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/KeychainStoreTests
 ```
 
@@ -230,7 +230,7 @@ Expected: 5 tests pass.
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: all green.
@@ -318,7 +318,7 @@ enum DietTrackerError: Error, Equatable {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: all green (additive change).
@@ -378,7 +378,7 @@ final class WhoAmITests: XCTestCase {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/WhoAmITests
 ```
 
@@ -406,7 +406,7 @@ struct WhoAmI: Decodable, Equatable {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/WhoAmITests
 ```
 
@@ -514,7 +514,7 @@ final class AuthCallbackParserTests: XCTestCase {
 ```bash
 xcodegen generate
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/AuthCallbackParserTests
 ```
 
@@ -554,7 +554,7 @@ enum AuthCallbackParser {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/AuthCallbackParserTests
 ```
 
@@ -1016,7 +1016,7 @@ Then update the assertions:
 ```bash
 xcodegen generate
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: all green. The app currently builds with bearer transport (still using the user-pasted token from Settings).
@@ -1074,7 +1074,7 @@ enum Constants {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: all green.
@@ -1161,7 +1161,7 @@ final class AuthSessionTests: XCTestCase {
 ```bash
 xcodegen generate
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/AuthSessionTests
 ```
 
@@ -1253,7 +1253,7 @@ final class AuthSession {
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test \
   -only-testing:DietTrackerTests/AuthSessionTests
 ```
 
@@ -1777,7 +1777,7 @@ For `ContainersListModel.swift`, both `load()` and `delete()` paths.
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
 Expected: build will fail because views pass `settings:` to these models. That's the next task.
@@ -1850,7 +1850,7 @@ Line 122 (`else if let id = model?.existingPhotoId, let client = settings.makeCl
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
 Expected: still failing — `RootView`, `SettingsView`, `DietTrackerApp` haven't been touched.
@@ -2213,7 +2213,7 @@ In `DietTracker/Config/Constants.swift`, add temporarily inside `enum Constants`
 ```bash
 xcodegen generate
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: green. (Test target uses no env var; the stop-gap fallback `https://example.test` keeps decoding tests happy.)
@@ -2301,7 +2301,7 @@ Replace the temporary computed property in `Constants.swift` with:
 export DIET_TRACKER_BASE_URL="https://your-server.example.com"
 xcodegen generate
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
 Expected: build green. Without the env var, the preBuildScripts step fails the build with a clear message.
@@ -2324,7 +2324,7 @@ Then run tests:
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: green.
@@ -2435,7 +2435,7 @@ Update `DietTrackerClient.swift` `makeURL` — its two `throw DietTrackerError.n
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: green. If any test still references `.notConfigured` (none should after the rename), update it.
@@ -2464,7 +2464,7 @@ Expected: no warnings about missing variables.
 ```bash
 unset DIET_TRACKER_BASE_URL
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
 Expected: build fails on the preBuildScripts "Verify BaseURL" phase with a clear message.
@@ -2474,7 +2474,7 @@ Expected: build fails on the preBuildScripts "Verify BaseURL" phase with a clear
 ```bash
 export DIET_TRACKER_BASE_URL="https://your-server.example.com"
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' build
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
 Expected: build green.
@@ -2483,7 +2483,7 @@ Expected: build green.
 
 ```bash
 xcodebuild -project DietTracker.xcodeproj -scheme DietTracker \
-  -destination 'platform=iOS Simulator,name=iPhone 15' test
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 Expected: green.
