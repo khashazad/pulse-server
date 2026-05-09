@@ -6,6 +6,7 @@ struct RootView: View {
     @State private var tab: DockTab = .log
     @State private var logPath = NavigationPath()
     @State private var mealsPath = NavigationPath()
+    @State private var prepPath = NavigationPath()
     @State private var showSettings = false
 
     var body: some View {
@@ -36,13 +37,18 @@ struct RootView: View {
                                 .toolbar { settingsButton }
                         }
                     }
+                case .prep:
+                    NavigationStack(path: $prepPath) {
+                        PrepView()
+                            .toolbar { settingsButton }
+                    }
                 }
             }
 
             if dockVisible {
                 FloatingDock(tab: $tab)
                     .padding(.horizontal, 32)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 4)
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -57,6 +63,7 @@ struct RootView: View {
         switch tab {
         case .log:   logPath.isEmpty
         case .meals: mealsPath.isEmpty
+        case .prep:  prepPath.isEmpty
         }
     }
 
