@@ -5,7 +5,7 @@ import os
 import uuid
 from datetime import datetime as DateTimeValue
 from datetime import timezone as TimezoneValue
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -49,9 +49,21 @@ def client() -> TestClient:
     ) as mock_usda_client:
         mock_usda_client.return_value.close = AsyncMock()
         from nutrition_server.app import app
+        from nutrition_server.db import get_session_dependency
 
-        with TestClient(app) as test_client:
-            yield test_client
+        async def _fake_session_dep():
+            session = MagicMock()
+            session.begin = MagicMock()
+            session.begin.return_value.__aenter__ = AsyncMock(return_value=session)
+            session.begin.return_value.__aexit__ = AsyncMock(return_value=False)
+            yield session
+
+        app.dependency_overrides[get_session_dependency] = _fake_session_dep
+        try:
+            with TestClient(app) as test_client:
+                yield test_client
+        finally:
+            app.dependency_overrides.pop(get_session_dependency, None)
 
 
 HEADERS = {"X-API-Key": "test-key"}
