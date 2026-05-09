@@ -4,7 +4,7 @@ from datetime import datetime as DateTimeValue
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,27 +156,11 @@ async def delete_container(
 @router.put("/containers/{container_id}/photo", response_model=ContainerPhotoStatus)
 async def upload_container_photo(
     container_id: UUID,
-    request: Request,
     file: UploadFile = File(...),
     user_key: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session_dependency),
 ) -> ContainerPhotoStatus:
     effective = user_key or settings.default_user_key
-
-    # Pre-flight when Content-Length is advertised. We still enforce the cap
-    # during the streamed read below, so this is purely an early-out for
-    # well-behaved clients; anyone omitting/lying about the header still hits
-    # the streaming check.
-    advertised = request.headers.get("content-length")
-    if advertised is not None:
-        try:
-            if int(advertised) > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"Upload exceeds {MAX_UPLOAD_BYTES}-byte cap",
-                )
-        except ValueError:
-            pass
 
     try:
         raw = await _read_capped(file, MAX_UPLOAD_BYTES)
