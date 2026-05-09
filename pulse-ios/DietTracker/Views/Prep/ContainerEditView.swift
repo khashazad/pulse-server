@@ -15,30 +15,68 @@ struct ContainerEditView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Photo") { photoSection }
-                Section("Details") {
-                    TextField("Name", text: Binding(
-                        get: { model?.name ?? "" },
-                        set: { model?.name = $0 }
-                    ))
-                    HStack {
-                        TextField("Tare weight", text: Binding(
-                            get: { model?.tareWeightText ?? "" },
-                            set: { model?.tareWeightText = $0 }
-                        ))
-                        .keyboardType(.decimalPad)
-                        Text("g").foregroundStyle(.secondary)
+            ZStack {
+                Theme.BG.secondary.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 24) {
+                        section(header: "Photo") { photoSection }
+
+                        section(header: "Details") {
+                            textRow {
+                                TextField(
+                                    "",
+                                    text: Binding(
+                                        get: { model?.name ?? "" },
+                                        set: { model?.name = $0 }
+                                    ),
+                                    prompt: Text("Name").foregroundStyle(Theme.FG.tertiary)
+                                )
+                                .font(.system(size: 15))
+                                .foregroundStyle(Theme.FG.primary)
+                                .tint(Theme.CTP.mauve)
+                                .textInputAutocapitalization(.words)
+                            }
+                            Rectangle().fill(Theme.separator).frame(height: 0.5)
+                            textRow {
+                                HStack {
+                                    TextField(
+                                        "",
+                                        text: Binding(
+                                            get: { model?.tareWeightText ?? "" },
+                                            set: { model?.tareWeightText = $0 }
+                                        ),
+                                        prompt: Text("Tare weight").foregroundStyle(Theme.FG.tertiary)
+                                    )
+                                    .font(.system(size: 15, design: .monospaced))
+                                    .foregroundStyle(Theme.FG.primary)
+                                    .tint(Theme.CTP.mauve)
+                                    .keyboardType(.decimalPad)
+                                    Text("g")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(Theme.FG.secondary)
+                                }
+                            }
+                        }
+
+                        if let err = model?.error {
+                            Text(err.userMessage)
+                                .font(.system(size: 13))
+                                .foregroundStyle(Theme.CTP.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                        }
                     }
-                }
-                if let err = model?.error {
-                    Section { Text(err.userMessage).foregroundStyle(.red) }
+                    .padding(.vertical, 16)
                 }
             }
             .navigationTitle(existing == nil ? "New container" : "Edit container")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.BG.secondary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.CTP.mauve)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(model?.saving == true ? "Saving…" : "Save") {
@@ -50,6 +88,12 @@ struct ContainerEditView: View {
                             }
                         }
                     }
+                    .fontWeight(.semibold)
+                    .foregroundStyle(
+                        (model?.isValid == true && model?.saving != true)
+                            ? Theme.CTP.mauve
+                            : Theme.FG.tertiary
+                    )
                     .disabled(model?.isValid != true || model?.saving == true)
                 }
             }
@@ -63,6 +107,7 @@ struct ContainerEditView: View {
                 Task { await loadPicked(newValue) }
             }
         }
+        .preferredColorScheme(.dark)
         .task {
             if model == nil { model = ContainerEditModel(existing: existing, settings: settings) }
         }
@@ -70,7 +115,7 @@ struct ContainerEditView: View {
 
     @ViewBuilder
     private var photoSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             ZStack {
                 if let img = previewImage {
                     Image(uiImage: img).resizable().scaledToFill()
@@ -78,44 +123,124 @@ struct ContainerEditView: View {
                     AuthorizedAsyncImage(
                         request: client.containerPhotoRequest(id: id, size: .full),
                         content: { $0.resizable().scaledToFill() },
-                        placeholder: { Color.gray.opacity(0.15) }
+                        placeholder: { Theme.CTP.surface0 }
                     )
                 } else {
                     ZStack {
-                        Color.gray.opacity(0.15)
-                        Image(systemName: "camera").font(.title).foregroundStyle(.secondary)
+                        Theme.CTP.surface0
+                        VStack(spacing: 6) {
+                            Image(systemName: "camera")
+                                .font(.system(size: 26))
+                                .foregroundStyle(Theme.CTP.mauve.opacity(0.6))
+                            Text("No photo")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.FG.tertiary)
+                        }
                     }
                 }
             }
             .frame(height: 200)
             .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipped()
+
+            Rectangle().fill(Theme.separator).frame(height: 0.5)
 
             HStack(spacing: 8) {
-                Button {
+                photoActionButton(label: "Camera", systemImage: "camera") {
                     showCamera = true
-                } label: {
-                    Label("Camera", systemImage: "camera")
                 }
-                .buttonStyle(.bordered)
-
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    Label("Library", systemImage: "photo")
-                }
-                .buttonStyle(.bordered)
+                photoPickerButton
 
                 if model?.existingPhotoId != nil || previewImage != nil {
                     Spacer()
-                    Button(role: .destructive) {
+                    photoActionButton(
+                        label: "Remove",
+                        systemImage: "trash",
+                        tint: Theme.CTP.red
+                    ) {
                         previewImage = nil
                         model?.clearPhoto()
-                    } label: {
-                        Label("Remove", systemImage: "trash")
                     }
-                    .buttonStyle(.bordered)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
+    }
+
+    private func photoActionButton(
+        label: String,
+        systemImage: String,
+        tint: Color = Theme.CTP.mauve,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint.opacity(0.14))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(tint.opacity(0.25), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var photoPickerButton: some View {
+        PhotosPicker(selection: $pickerItem, matching: .images) {
+            HStack(spacing: 6) {
+                Image(systemName: "photo")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Library")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(Theme.CTP.mauve)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Theme.CTP.mauve.opacity(0.14))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Theme.CTP.mauve.opacity(0.25), lineWidth: 0.5)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func section<Content: View>(
+        header: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(header)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(Theme.FG.secondary)
+                .padding(.horizontal, 20)
+            VStack(spacing: 0) { content() }
+                .ctpCard()
+                .padding(.horizontal, 16)
+        }
+    }
+
+    @ViewBuilder
+    private func textRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
     }
 
     private func loadPicked(_ item: PhotosPickerItem?) async {

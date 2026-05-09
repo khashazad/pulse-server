@@ -48,7 +48,7 @@ struct RootView: View {
             if dockVisible {
                 FloatingDock(tab: $tab)
                     .padding(.horizontal, 32)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 4)
             }
         }
         .sheet(isPresented: $showSettings) {

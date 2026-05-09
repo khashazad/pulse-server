@@ -9,29 +9,40 @@ struct ContainersListView: View {
 
     var body: some View {
         NavigationStack {
-            content
-                .navigationTitle("Containers")
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { showAdd = true } label: { Image(systemName: "plus") }
-                    }
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Done") { dismiss() }
+            ZStack {
+                Theme.BG.secondary.ignoresSafeArea()
+                content
+            }
+            .navigationTitle("Containers")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.BG.secondary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(Theme.CTP.mauve)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAdd = true } label: {
+                        Image(systemName: "plus")
+                            .foregroundStyle(Theme.CTP.mauve)
                     }
                 }
-                .sheet(isPresented: $showAdd) {
-                    ContainerEditView(existing: nil) { _ in
-                        Task { await model?.load() }
-                    }
-                    .environment(settings)
+            }
+            .sheet(isPresented: $showAdd) {
+                ContainerEditView(existing: nil) { _ in
+                    Task { await model?.load() }
                 }
-                .sheet(item: $editing) { container in
-                    ContainerEditView(existing: container) { _ in
-                        Task { await model?.load() }
-                    }
-                    .environment(settings)
+                .environment(settings)
+            }
+            .sheet(item: $editing) { container in
+                ContainerEditView(existing: container) { _ in
+                    Task { await model?.load() }
                 }
+                .environment(settings)
+            }
         }
+        .preferredColorScheme(.dark)
         .task { await ensureModel(); await model?.load() }
     }
 
@@ -39,39 +50,47 @@ struct ContainersListView: View {
     private var content: some View {
         switch model?.state ?? .idle {
         case .idle, .loading:
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView()
+                .tint(Theme.CTP.mauve)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let e):
-            ContentUnavailableView {
-                Label("Couldn't load containers", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(e.userMessage)
-            } actions: {
-                Button("Retry") { Task { await model?.load() } }
-            }
+            EmptyStateView(
+                icon: "exclamationmark.triangle",
+                title: "Couldn't load containers",
+                description: e.userMessage,
+                action: { Task { await model?.load() } },
+                actionLabel: "Retry"
+            )
         case .loaded(let list) where list.isEmpty:
-            ContentUnavailableView {
-                Label("No containers yet", systemImage: "cube.box")
-            } description: {
-                Text("Add your first pot or meal-prep box.")
-            } actions: {
-                Button("Add a container") { showAdd = true }
-            }
+            EmptyStateView(
+                icon: "cube.box",
+                title: "No containers yet",
+                description: "Add your first pot or meal-prep box.",
+                action: { showAdd = true },
+                actionLabel: "Add a container"
+            )
         case .loaded(let list):
             List {
-                ForEach(list) { c in
-                    Button {
-                        editing = c
-                    } label: {
-                        ContainerRow(container: c)
+                Section {
+                    ForEach(list) { c in
+                        Button {
+                            editing = c
+                        } label: {
+                            ContainerRow(container: c)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Theme.BG.tertiary)
+                        .listRowSeparatorTint(Theme.separator)
                     }
-                    .buttonStyle(.plain)
-                }
-                .onDelete { idx in
-                    Task {
-                        for i in idx { await model?.delete(id: list[i].id) }
+                    .onDelete { idx in
+                        Task {
+                            for i in idx { await model?.delete(id: list[i].id) }
+                        }
                     }
                 }
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -88,13 +107,20 @@ struct ContainerRow: View {
         HStack(spacing: 12) {
             thumbnail
                 .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading) {
-                Text(container.name).font(.body)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(container.name)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Theme.FG.primary)
                 Text("\(Int(container.tareWeightG.rounded())) g")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.system(size: 12, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.FG.tertiary)
             }
+            Spacer()
         }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -103,12 +129,14 @@ struct ContainerRow: View {
             AuthorizedAsyncImage(
                 request: client.containerPhotoRequest(id: container.id, size: .thumb),
                 content: { $0.resizable().scaledToFill() },
-                placeholder: { Color.gray.opacity(0.2) }
+                placeholder: { Theme.CTP.surface0 }
             )
         } else {
             ZStack {
-                Color.gray.opacity(0.15)
-                Image(systemName: "cube.box").foregroundStyle(.secondary)
+                Theme.CTP.surface0
+                Image(systemName: "cube.box")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Theme.FG.tertiary)
             }
         }
     }
