@@ -59,7 +59,7 @@ async def exchange_code_for_id_token(*, code: str) -> str:
             resp = await client.post(GOOGLE_TOKEN_URL, data=body)
             resp.raise_for_status()
             data = resp.json()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         raise GoogleAuthError("Google token endpoint failed") from exc
 
     token = data.get("id_token")

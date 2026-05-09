@@ -130,3 +130,23 @@ def test_verify_id_token_raises_when_email_missing():
     with patch("diet_tracker_server.auth.google.id_token.verify_oauth2_token", return_value=payload):
         with pytest.raises(g.GoogleAuthError, match="missing"):
             g.verify_id_token("jwt-here")
+
+
+@pytest.mark.asyncio
+async def test_exchange_code_raises_on_invalid_json():
+    from diet_tracker_server.auth import google as g
+
+    mock_client = AsyncMock()
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    def _bad_json():
+        raise ValueError("not json")
+    mock_response.json = _bad_json
+    mock_response.raise_for_status = lambda: None
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+    mock_client.post.return_value = mock_response
+
+    with patch("diet_tracker_server.auth.google.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(g.GoogleAuthError):
+            await g.exchange_code_for_id_token(code="x")
