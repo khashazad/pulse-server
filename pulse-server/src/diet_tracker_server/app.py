@@ -3,21 +3,27 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastmcp.utilities.lifespan import combine_lifespans
 
-from diet_tracker_server import auth, db
+from diet_tracker_server import db
 from diet_tracker_server.config import get_settings
-from diet_tracker_server.mcp import build_mcp
-from diet_tracker_server.routers import (
-    custom_foods as custom_foods_router,
-    entries,
-    food_memory as food_memory_router,
-    logs,
-    meals as meals_router,
-    summary,
-    targets,
-)
-from diet_tracker_server.routers import usda as usda_router
+
+# TODO(Task 12): re-enable after require_session migration
+# from diet_tracker_server.routers import (
+#     custom_foods as custom_foods_router,
+#     entries,
+#     food_memory as food_memory_router,
+#     logs,
+#     meals as meals_router,
+#     summary,
+#     targets,
+# )
+# from diet_tracker_server.routers import usda as usda_router
+
+# TODO(Task 14): re-enable after MCP X-API-Key fallback is dropped
+# from fastmcp.utilities.lifespan import combine_lifespans
+# from diet_tracker_server.mcp import build_mcp
+
+from diet_tracker_server.routers import auth as auth_router
 from diet_tracker_server.usda import USDAClient
 
 usda_client: USDAClient | None = None
@@ -50,7 +56,8 @@ async def lifespan(app: FastAPI):
     del app
     global usda_client
     settings = get_settings()
-    auth.configure(settings.api_key)
+    # TODO(Task 11): drop this comment — auth.configure removed; session middleware wired here
+    # auth.configure(settings.api_key)
     await db.init_pool(settings.database_url)
     await db.bootstrap_schema()
     usda_client = USDAClient(settings.usda_api_key)
@@ -59,13 +66,14 @@ async def lifespan(app: FastAPI):
     await db.close_pool()
 
 
-mcp = build_mcp(get_usda_client)
-mcp_app = mcp.http_app(path="/")
+# TODO(Task 14): re-enable MCP mounting once X-API-Key fallback is dropped
+# mcp = build_mcp(get_usda_client)
+# mcp_app = mcp.http_app(path="/")
 
 app = FastAPI(
     title="Diet Server",
     version="0.1.0",
-    lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
+    lifespan=lifespan,
 )
 
 
@@ -80,20 +88,25 @@ app = FastAPI(
 async def health() -> dict[str, str]:
     return {"status": "ok"}
 
-app.include_router(entries.router)
-app.include_router(summary.router)
-app.include_router(targets.router)
-app.include_router(usda_router.router)
-app.include_router(logs.router)
-app.include_router(custom_foods_router.router)
-app.include_router(food_memory_router.router)
-app.include_router(meals_router.router)
 
+app.include_router(auth_router.router)
+
+# TODO(Task 12): re-enable after require_session migration
+# app.include_router(entries.router)
+# app.include_router(summary.router)
+# app.include_router(targets.router)
+# app.include_router(usda_router.router)
+# app.include_router(logs.router)
+# app.include_router(custom_foods_router.router)
+# app.include_router(food_memory_router.router)
+# app.include_router(meals_router.router)
+
+# TODO(Task 14): re-enable MCP OAuth metadata routes + /mcp mount
 # OAuth metadata routes (.well-known/oauth-authorization-server, /authorize, /token, etc.)
 # must live at the root so claude.ai's connector can discover them. The MCP server itself
 # stays mounted at /mcp.
-if mcp.auth is not None:
-    for route in mcp.auth.get_routes(mcp_path="/mcp/"):
-        app.routes.append(route)
-
-app.mount("/mcp", mcp_app)
+# if mcp.auth is not None:
+#     for route in mcp.auth.get_routes(mcp_path="/mcp/"):
+#         app.routes.append(route)
+#
+# app.mount("/mcp", mcp_app)
