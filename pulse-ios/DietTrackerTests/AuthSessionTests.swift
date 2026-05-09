@@ -89,3 +89,85 @@ extension AuthSessionTests {
         XCTAssertFalse(auth.isSignedIn)
     }
 }
+
+extension AuthSessionTests {
+    private func makeStubSession() -> URLSession {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        return URLSession(configuration: cfg)
+    }
+
+    func testBootstrapHappyPathStaysSignedIn() async {
+        writeStoredSession(token: "tok", email: "khashzd@gmail.com")
+        StubURLProtocol.responder = { req in
+            let body = #"{"email":"khashzd@gmail.com","expires_at":"2026-08-07T12:00:00Z"}"#
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, body.data(using: .utf8)!)
+        }
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount,
+            urlSession: makeStubSession()
+        )
+        await auth.bootstrap()
+        XCTAssertTrue(auth.isSignedIn)
+        StubURLProtocol.responder = nil
+    }
+
+    func testBootstrap401SignsOutAndClearsKeychain() async {
+        writeStoredSession(token: "tok", email: "khashzd@gmail.com")
+        StubURLProtocol.responder = { req in
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount,
+            urlSession: makeStubSession()
+        )
+        await auth.bootstrap()
+        XCTAssertFalse(auth.isSignedIn)
+        XCTAssertNil(KeychainStore.read(service: testService, account: testAccount))
+        StubURLProtocol.responder = nil
+    }
+
+    func testBootstrapNetworkErrorKeepsOptimisticSignedIn() async {
+        writeStoredSession(token: "tok", email: "khashzd@gmail.com")
+        StubURLProtocol.responder = { _ in
+            // 500 is a non-401 error that bootstrap should ignore (offline-grace).
+            let resp = HTTPURLResponse(url: URL(string: "https://example.test")!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount,
+            urlSession: makeStubSession()
+        )
+        await auth.bootstrap()
+        XCTAssertTrue(auth.isSignedIn)
+        StubURLProtocol.responder = nil
+    }
+
+    func testBootstrapWithNoStoredTokenIsNoOp() async {
+        clearStoredSession()
+        var hit = false
+        StubURLProtocol.responder = { req in
+            hit = true
+            let resp = HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (resp, Data())
+        }
+        let auth = AuthSession(
+            baseURL: URL(string: "https://example.test")!,
+            keychainService: testService,
+            keychainAccount: testAccount,
+            urlSession: makeStubSession()
+        )
+        await auth.bootstrap()
+        XCTAssertFalse(hit)
+        XCTAssertFalse(auth.isSignedIn)
+        StubURLProtocol.responder = nil
+    }
+}

@@ -56,6 +56,28 @@ final class AuthSession {
         }
     }
 
+    func bootstrap() async {
+        guard let token = storedToken else { return }
+        let client = DietTrackerClient(
+            baseURL: baseURL,
+            sessionToken: token,
+            session: urlSession
+        )
+        do {
+            _ = try await client.whoami()
+            // 200 → no-op; sliding TTL handled server-side.
+        } catch DietTrackerError.unauthorized {
+            handleUnauthorized()
+        } catch {
+            // Network/server errors are non-fatal — keep optimistic sign-in.
+        }
+    }
+
+    func handleUnauthorized() {
+        _ = clearStored()
+        state = .signedOut
+    }
+
     // MARK: - storage
 
     private struct StoredSession: Codable {
