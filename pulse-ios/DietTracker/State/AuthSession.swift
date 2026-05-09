@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import AuthenticationServices
 
 @Observable
 final class AuthSession {
@@ -24,6 +25,9 @@ final class AuthSession {
     private let keychainService: String
     private let keychainAccount: String
     private let urlSession: URLSession
+    /// Holds the in-flight ASWebAuthenticationSession so it isn't deallocated
+    /// before the system delivers the callback URL.
+    private var activeWebAuthSession: ASWebAuthenticationSession?
 
     init(
         baseURL: URL,
@@ -140,15 +144,13 @@ final class AuthSession {
     }
 }
 
-import AuthenticationServices
-
 @MainActor
 extension AuthSession {
     func signInWithGoogle(presentationAnchor: ASPresentationAnchor) async {
         state = .signingIn
         let url = startSignInURL()
         do {
-            let callback = try await Self.startWebAuth(
+            let callback = try await startWebAuth(
                 url: url,
                 callbackScheme: Constants.Auth.callbackScheme,
                 presentationAnchor: presentationAnchor
@@ -161,16 +163,25 @@ extension AuthSession {
         }
     }
 
-    private static func startWebAuth(
+    private func startWebAuth(
         url: URL,
         callbackScheme: String,
         presentationAnchor: ASPresentationAnchor
     ) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
+            // The session must outlive this synchronous block — the system delivers
+            // the callback later. Stash it on `self` so ARC keeps it alive.
+            // Belt-and-braces single-resume: `session.start()` returning false should
+            // not race with a later completion-handler invocation, but guard anyway.
+            var didResume = false
+
             let session = ASWebAuthenticationSession(
                 url: url,
                 callbackURLScheme: callbackScheme
-            ) { callback, error in
+            ) { [weak self] callback, error in
+                guard !didResume else { return }
+                didResume = true
+                self?.activeWebAuthSession = nil
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else if let callback = callback {
@@ -181,7 +192,11 @@ extension AuthSession {
             }
             session.presentationContextProvider = SignInPresentationContextProvider(anchor: presentationAnchor)
             session.prefersEphemeralWebBrowserSession = false
+            self.activeWebAuthSession = session
             if !session.start() {
+                guard !didResume else { return }
+                didResume = true
+                self.activeWebAuthSession = nil
                 continuation.resume(throwing: DietTrackerError.signInFailed(reason: "invalid_callback"))
             }
         }

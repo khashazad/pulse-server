@@ -2,12 +2,16 @@ import Foundation
 
 enum Constants {
     static let baseURL: URL = {
+        let raw = (Bundle.main.object(forInfoDictionaryKey: "BaseURL") as? String) ?? ""
         guard
-            let raw = Bundle.main.object(forInfoDictionaryKey: "BaseURL") as? String,
             !raw.isEmpty,
-            let url = URL(string: raw)
+            let url = URL(string: raw),
+            let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https",
+            let host = url.host,
+            !host.isEmpty
         else {
-            fatalError("BaseURL missing from Info.plist — set DIET_TRACKER_BASE_URL before xcodegen")
+            fatalError(#"BaseURL must be an absolute http(s) URL with a host — got "\#(raw)". Set DIET_TRACKER_BASE_URL before xcodegen."#)
         }
         return url
     }()

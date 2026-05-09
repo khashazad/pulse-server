@@ -27,10 +27,10 @@ enum KeychainStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        let attrs: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-        ]
+        // Per Apple's docs, `kSecAttrAccessible` is an attribute of the item set at
+        // insert time. Including it in `SecItemUpdate`'s attrs can produce spurious
+        // failures, so the update payload is the data only.
+        let attrs: [String: Any] = [kSecValueData as String: data]
         let updateStatus = SecItemUpdate(query as CFDictionary, attrs as CFDictionary)
         if updateStatus == errSecSuccess { return true }
         if updateStatus == errSecItemNotFound {

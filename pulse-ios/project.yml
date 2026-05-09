@@ -46,6 +46,13 @@ targets:
             echo "error: DIET_TRACKER_BASE_URL not set in environment at build time. Export it before xcodebuild."
             exit 1
           fi
+          case "${DIET_TRACKER_BASE_URL}" in
+            http://*|https://*) ;;
+            *)
+              echo "error: DIET_TRACKER_BASE_URL must be an absolute http(s) URL, got: ${DIET_TRACKER_BASE_URL}"
+              exit 1
+              ;;
+          esac
         basedOnDependencyAnalysis: false
     settings:
       base:
