@@ -8,17 +8,16 @@ from diet_tracker_server import db
 from diet_tracker_server.auth import SessionAuthMiddleware, UserKeyGuardrailMiddleware
 from diet_tracker_server.config import get_settings
 
-# TODO(Task 12): re-enable after require_session migration
-# from diet_tracker_server.routers import (
-#     custom_foods as custom_foods_router,
-#     entries,
-#     food_memory as food_memory_router,
-#     logs,
-#     meals as meals_router,
-#     summary,
-#     targets,
-# )
-# from diet_tracker_server.routers import usda as usda_router
+from diet_tracker_server.routers import (
+    custom_foods as custom_foods_router,
+    entries,
+    food_memory as food_memory_router,
+    logs,
+    meals as meals_router,
+    summary,
+    targets,
+)
+from diet_tracker_server.routers import usda as usda_router
 
 # TODO(Task 14): re-enable after MCP X-API-Key fallback is dropped
 # from fastmcp.utilities.lifespan import combine_lifespans
@@ -92,16 +91,14 @@ async def health() -> dict[str, str]:
 
 
 app.include_router(auth_router.router)
-
-# TODO(Task 12): re-enable after require_session migration
-# app.include_router(entries.router)
-# app.include_router(summary.router)
-# app.include_router(targets.router)
-# app.include_router(usda_router.router)
-# app.include_router(logs.router)
-# app.include_router(custom_foods_router.router)
-# app.include_router(food_memory_router.router)
-# app.include_router(meals_router.router)
+app.include_router(entries.router)
+app.include_router(summary.router)
+app.include_router(targets.router)
+app.include_router(usda_router.router)
+app.include_router(logs.router)
+app.include_router(custom_foods_router.router)
+app.include_router(food_memory_router.router)
+app.include_router(meals_router.router)
 
 # TODO(Task 14): re-enable MCP OAuth metadata routes + /mcp mount
 # OAuth metadata routes (.well-known/oauth-authorization-server, /authorize, /token, etc.)
