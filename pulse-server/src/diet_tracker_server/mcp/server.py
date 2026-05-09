@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from diet_tracker_server.config import get_settings
 from diet_tracker_server.db import get_session, transaction
 from diet_tracker_server.macro_aggregates import sum_food_entry_macros
-from diet_tracker_server.mcp.auth import ApiKeyMiddleware, GitHubAllowlistMiddleware
+from diet_tracker_server.mcp.auth import GitHubAllowlistMiddleware
 from diet_tracker_server.models import (
     CustomFoodCreate,
     CustomFoodResponse,
@@ -206,12 +206,12 @@ def build_mcp(usda_getter) -> FastMCP:
     Indirection lets callers bind to `app.get_usda_client` after lifespan startup without import cycles.
 
     Auth: GitHubProvider when GITHUB_CLIENT_ID/SECRET + PUBLIC_BASE_URL are set (claude.ai connector
-    requires OAuth + DCR). Otherwise falls back to X-API-Key middleware for local dev / curl.
+    requires OAuth + DCR). Otherwise the MCP layer runs unauthenticated (local dev only).
     """
     settings = get_settings()
     tz = ZoneInfo(settings.timezone)
 
-    if settings.oauth_enabled:
+    if settings.mcp_oauth_enabled:
         from fastmcp.server.auth.providers.github import GitHubProvider
 
         auth_provider = GitHubProvider(
@@ -223,8 +223,9 @@ def build_mcp(usda_getter) -> FastMCP:
         if settings.allowed_github_users_set:
             mcp.add_middleware(GitHubAllowlistMiddleware(settings.allowed_github_users_set))
     else:
+        # Local dev: MCP runs unauthenticated. Production must set GITHUB_CLIENT_ID/SECRET +
+        # PUBLIC_BASE_URL so the GitHub OAuth path activates.
         mcp = FastMCP(name="diet", instructions=WORKFLOW_INSTRUCTIONS)
-        mcp.add_middleware(ApiKeyMiddleware(settings.api_key))
 
     user_key = settings.default_user_key
 

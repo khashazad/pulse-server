@@ -3,10 +3,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastmcp.utilities.lifespan import combine_lifespans
 
 from diet_tracker_server import db
 from diet_tracker_server.auth import SessionAuthMiddleware, UserKeyGuardrailMiddleware
 from diet_tracker_server.config import get_settings
+from diet_tracker_server.mcp import build_mcp
 
 from diet_tracker_server.routers import (
     custom_foods as custom_foods_router,
@@ -18,10 +20,6 @@ from diet_tracker_server.routers import (
     targets,
 )
 from diet_tracker_server.routers import usda as usda_router
-
-# TODO(Task 14): re-enable after MCP X-API-Key fallback is dropped
-# from fastmcp.utilities.lifespan import combine_lifespans
-# from diet_tracker_server.mcp import build_mcp
 
 from diet_tracker_server.routers import auth as auth_router
 from diet_tracker_server.usda import USDAClient
@@ -64,14 +62,13 @@ async def lifespan(app: FastAPI):
     await db.close_pool()
 
 
-# TODO(Task 14): re-enable MCP mounting once X-API-Key fallback is dropped
-# mcp = build_mcp(get_usda_client)
-# mcp_app = mcp.http_app(path="/")
+mcp = build_mcp(get_usda_client)
+mcp_app = mcp.http_app(path="/")
 
 app = FastAPI(
     title="Diet Server",
     version="0.1.0",
-    lifespan=lifespan,
+    lifespan=combine_lifespans(lifespan, mcp_app.lifespan),
 )
 
 app.add_middleware(SessionAuthMiddleware)
@@ -100,12 +97,11 @@ app.include_router(custom_foods_router.router)
 app.include_router(food_memory_router.router)
 app.include_router(meals_router.router)
 
-# TODO(Task 14): re-enable MCP OAuth metadata routes + /mcp mount
 # OAuth metadata routes (.well-known/oauth-authorization-server, /authorize, /token, etc.)
 # must live at the root so claude.ai's connector can discover them. The MCP server itself
 # stays mounted at /mcp.
-# if mcp.auth is not None:
-#     for route in mcp.auth.get_routes(mcp_path="/mcp/"):
-#         app.routes.append(route)
-#
-# app.mount("/mcp", mcp_app)
+if mcp.auth is not None:
+    for route in mcp.auth.get_routes(mcp_path="/mcp/"):
+        app.routes.append(route)
+
+app.mount("/mcp", mcp_app)
