@@ -23,6 +23,8 @@ class FoodEntryCreate(BaseModel):
     fat_g: float = Field(ge=0)
     date: DateValue | None = None
     consumed_at: DateTimeValue | None = None
+    meal_id: UUID | None = None
+    meal_name: str | None = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "FoodEntryCreate":
@@ -55,6 +57,8 @@ class FoodEntryResponse(BaseModel):
     protein_g: float
     carbs_g: float
     fat_g: float
+    meal_id: UUID | None = None
+    meal_name: str | None = None
     consumed_at: DateTimeValue
     created_at: DateTimeValue
 

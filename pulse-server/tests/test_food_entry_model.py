@@ -1,6 +1,8 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+
+from diet_tracker_server.models.entries import FoodEntryCreate, FoodEntryResponse
 
 
 def test_food_entry_create_accepts_usda_only() -> None:
@@ -81,3 +83,42 @@ def test_food_entry_create_rejects_missing_usda_description() -> None:
             carbs_g=0,
             fat_g=0,
         )
+
+
+def test_food_entry_create_defaults_meal_link_to_none() -> None:
+    entry = FoodEntryCreate(
+        display_name="oats",
+        quantity_text="80 g",
+        usda_fdc_id=173904,
+        usda_description="Oats, raw",
+        calories=320,
+        protein_g=10,
+        carbs_g=54,
+        fat_g=6,
+    )
+    assert entry.meal_id is None
+    assert entry.meal_name is None
+
+
+def test_food_entry_create_accepts_meal_link() -> None:
+    meal_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    entry = FoodEntryCreate(
+        display_name="oats",
+        quantity_text="80 g",
+        usda_fdc_id=173904,
+        usda_description="Oats, raw",
+        calories=320,
+        protein_g=10,
+        carbs_g=54,
+        fat_g=6,
+        meal_id=meal_id,
+        meal_name="Breakfast",
+    )
+    assert entry.meal_id == meal_id
+    assert entry.meal_name == "Breakfast"
+
+
+def test_food_entry_response_exposes_meal_link() -> None:
+    fields = FoodEntryResponse.model_fields
+    assert "meal_id" in fields
+    assert "meal_name" in fields
