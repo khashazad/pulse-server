@@ -71,6 +71,8 @@ async def _create_entries(
                 carbs_g=item.carbs_g,
                 fat_g=item.fat_g,
                 consumed_at=consumed_at,
+                meal_id=item.meal_id,
+                meal_name=item.meal_name,
             )
         )
 
