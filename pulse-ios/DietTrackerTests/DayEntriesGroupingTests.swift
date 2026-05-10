@@ -115,6 +115,38 @@ final class DayEntriesGroupingTests: XCTestCase {
         XCTAssertEqual(group.items.map { $0.displayName }, ["Oats v2", "Yogurt v2", "Berries v2"])
     }
 
+    func testRenamedMealUsesLatestInstanceName() {
+        let g1 = "aabbccdd-1111-1111-1111-aabbccddeeff"
+        let g2 = "aabbccdd-2222-2222-2222-aabbccddeeff"
+        let entries = [
+            entry(groupId: g1, name: "Oats", mealId: mealA, mealName: "Old Name", consumedAt: date(8)),
+            entry(groupId: g1, name: "Yogurt", mealId: mealA, mealName: "Old Name", consumedAt: date(8)),
+            entry(groupId: g2, name: "Oats", mealId: mealA, mealName: "New Name", consumedAt: date(13)),
+            entry(groupId: g2, name: "Yogurt", mealId: mealA, mealName: "New Name", consumedAt: date(13)),
+        ]
+        let rows = groupDayEntries(entries)
+        XCTAssertEqual(rows.count, 1)
+        guard case .meal(let group) = rows[0] else { return XCTFail("expected meal") }
+        XCTAssertEqual(group.count, 2)
+        XCTAssertEqual(group.displayName, "New Name")
+    }
+
+    func testOlderInstanceNameWinsWhenLatestIsMissing() {
+        let g1 = "ccddeeff-1111-1111-1111-ccddeeff0011"
+        let g2 = "ccddeeff-2222-2222-2222-ccddeeff0011"
+        let entries = [
+            entry(groupId: g1, name: "Oats", mealId: mealA, mealName: "Real Name", consumedAt: date(8)),
+            entry(groupId: g1, name: "Yogurt", mealId: mealA, mealName: "Real Name", consumedAt: date(8)),
+            entry(groupId: g2, name: "Oats", mealId: mealA, mealName: nil, consumedAt: date(13)),
+            entry(groupId: g2, name: "Yogurt", mealId: mealA, mealName: nil, consumedAt: date(13)),
+        ]
+        let rows = groupDayEntries(entries)
+        XCTAssertEqual(rows.count, 1)
+        guard case .meal(let group) = rows[0] else { return XCTFail("expected meal") }
+        XCTAssertEqual(group.count, 2)
+        XCTAssertEqual(group.displayName, "Real Name")
+    }
+
     func testNilMealIdMultiItemGroupsStaySeparateAndUseFallbackName() {
         let g1 = "88888888-8888-8888-8888-888888888888"
         let g2 = "99999999-9999-9999-9999-999999999999"

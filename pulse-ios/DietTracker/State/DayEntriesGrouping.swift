@@ -78,10 +78,17 @@ func groupDayEntries(_ entries: [FoodEntry]) -> [DayRow] {
             if let mealId, let existing = mergedByMealId[mealId] {
                 let prev = existing.1
                 let useNewItems = time >= prev.sortDate
+                // Pin displayName to the same instance that wins for items; fall back to the
+                // other instance's name (or "Meal") when the chosen instance has no name.
+                let newCandidate: String? = (mealName?.isEmpty == false) ? mealName : nil
+                let prevCandidate: String? = prev.displayName == "Meal" ? nil : prev.displayName
+                let mergedDisplayName = useNewItems
+                    ? (newCandidate ?? prevCandidate ?? "Meal")
+                    : (prevCandidate ?? newCandidate ?? "Meal")
                 let merged = MealGroup(
                     id: prev.id,
                     mealId: prev.mealId,
-                    displayName: prev.displayName,
+                    displayName: mergedDisplayName,
                     count: prev.count + 1,
                     items: useNewItems ? items : prev.items,
                     totals: MacroTotals(
