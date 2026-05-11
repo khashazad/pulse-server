@@ -42,6 +42,7 @@ class MealCreate(BaseModel):
     name: str
     notes: str | None = None
     items: list[MealItemCreate] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
 
 
 class MealUpdate(BaseModel):
@@ -55,6 +56,7 @@ class MealResponse(BaseModel):
     name: str
     normalized_name: str
     notes: str | None
+    aliases: list[str] = Field(default_factory=list)
     created_at: DateTimeValue
     updated_at: DateTimeValue
     items: list[MealItemResponse] = Field(default_factory=list)
@@ -65,6 +67,7 @@ class MealSummary(BaseModel):
     name: str
     normalized_name: str
     notes: str | None
+    aliases: list[str] = Field(default_factory=list)
     item_count: int
     total_calories: int = 0
     total_protein_g: float = 0.0

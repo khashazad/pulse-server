@@ -170,3 +170,40 @@ def test_food_memory_table_has_aliases_column() -> None:
     from diet_tracker_server.repositories.tables import food_memory, meals
     assert "aliases" in food_memory.c
     assert "aliases" in meals.c
+
+
+def test_food_memory_entry_aliases_defaults_to_empty_list() -> None:
+    from datetime import datetime
+    from uuid import uuid4
+    from diet_tracker_server.models import FoodMemoryEntry
+
+    entry = FoodMemoryEntry(
+        id=uuid4(),
+        user_key="khash",
+        name="PB",
+        normalized_name="pb",
+        usda_fdc_id=1,
+        usda_description="PB",
+        basis="per_100g",
+        calories=100,
+        protein_g=1.0,
+        carbs_g=1.0,
+        fat_g=1.0,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    assert entry.aliases == []
+
+
+def test_meal_summary_aliases_defaults_to_empty_list() -> None:
+    from uuid import uuid4
+    from diet_tracker_server.models import MealSummary
+
+    summary = MealSummary(
+        id=uuid4(),
+        name="Wrap",
+        normalized_name="wrap",
+        notes=None,
+        item_count=0,
+    )
+    assert summary.aliases == []
