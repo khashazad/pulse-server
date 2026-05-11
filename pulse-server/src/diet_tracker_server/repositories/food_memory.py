@@ -4,7 +4,7 @@ from datetime import datetime as DateTimeValue
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ def _row_columns() -> tuple[Any, ...]:
         food_memory.c.protein_g,
         food_memory.c.carbs_g,
         food_memory.c.fat_g,
+        food_memory.c.aliases,
         food_memory.c.created_at,
         food_memory.c.updated_at,
     )
@@ -71,8 +72,9 @@ class FoodMemoryRepository:
         carbs_g: float,
         fat_g: float,
         now: DateTimeValue,
+        aliases: list[str] | None = None,
     ) -> dict[str, Any]:
-        insert_stmt = pg_insert(food_memory).values(
+        values: dict[str, Any] = dict(
             user_key=user_key,
             name=name,
             normalized_name=normalized_name,
@@ -89,22 +91,28 @@ class FoodMemoryRepository:
             created_at=now,
             updated_at=now,
         )
+        if aliases is not None:
+            values["aliases"] = aliases
+        insert_stmt = pg_insert(food_memory).values(**values)
+        set_: dict[str, Any] = {
+            "name": insert_stmt.excluded.name,
+            "usda_fdc_id": insert_stmt.excluded.usda_fdc_id,
+            "usda_description": insert_stmt.excluded.usda_description,
+            "custom_food_id": None,
+            "basis": insert_stmt.excluded.basis,
+            "serving_size": insert_stmt.excluded.serving_size,
+            "serving_size_unit": insert_stmt.excluded.serving_size_unit,
+            "calories": insert_stmt.excluded.calories,
+            "protein_g": insert_stmt.excluded.protein_g,
+            "carbs_g": insert_stmt.excluded.carbs_g,
+            "fat_g": insert_stmt.excluded.fat_g,
+            "updated_at": now,
+        }
+        if aliases is not None:
+            set_["aliases"] = insert_stmt.excluded.aliases
         stmt = insert_stmt.on_conflict_do_update(
             index_elements=[food_memory.c.user_key, food_memory.c.normalized_name],
-            set_={
-                "name": insert_stmt.excluded.name,
-                "usda_fdc_id": insert_stmt.excluded.usda_fdc_id,
-                "usda_description": insert_stmt.excluded.usda_description,
-                "custom_food_id": None,
-                "basis": insert_stmt.excluded.basis,
-                "serving_size": insert_stmt.excluded.serving_size,
-                "serving_size_unit": insert_stmt.excluded.serving_size_unit,
-                "calories": insert_stmt.excluded.calories,
-                "protein_g": insert_stmt.excluded.protein_g,
-                "carbs_g": insert_stmt.excluded.carbs_g,
-                "fat_g": insert_stmt.excluded.fat_g,
-                "updated_at": now,
-            },
+            set_=set_,
         ).returning(*_row_columns())
         result = await self._session.execute(stmt)
         return dict(result.mappings().one())
@@ -192,7 +200,12 @@ class FoodMemoryRepository:
             )
             .select_from(food_memory.outerjoin(custom_foods, custom_foods.c.id == food_memory.c.custom_food_id))
             .where(food_memory.c.user_key == user_key)
-            .where(food_memory.c.normalized_name == normalized_name)
+            .where(
+                or_(
+                    food_memory.c.normalized_name == normalized_name,
+                    food_memory.c.aliases.any(normalized_name),
+                )
+            )
         )
         result = await self._session.execute(stmt)
         row = result.mappings().first()
@@ -227,3 +240,58 @@ class FoodMemoryRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+    # Summary: Appends `alias` to the row's aliases array if not already present.
+    # Parameters:
+    # - user_key (str): Owner.
+    # - normalized_name (str): Canonical row identifier.
+    # - alias (str): Already-normalized alias to add.
+    # - now (DateTimeValue): Timestamp for updated_at.
+    # Returns:
+    # - dict[str, Any] | None: Updated row, or None if no such food_memory row exists.
+    async def add_alias(
+        self,
+        user_key: str,
+        normalized_name: str,
+        alias: str,
+        now: DateTimeValue,
+    ) -> dict[str, Any] | None:
+        stmt = (
+            update(food_memory)
+            .where(food_memory.c.user_key == user_key)
+            .where(food_memory.c.normalized_name == normalized_name)
+            .values(
+                aliases=func.array(
+                    select(func.unnest(func.array_append(food_memory.c.aliases, alias)))
+                    .distinct()
+                    .scalar_subquery()
+                ),
+                updated_at=now,
+            )
+            .returning(*_row_columns())
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+    # Summary: Removes `alias` from the row's aliases array. No-op if absent.
+    async def remove_alias(
+        self,
+        user_key: str,
+        normalized_name: str,
+        alias: str,
+        now: DateTimeValue,
+    ) -> dict[str, Any] | None:
+        stmt = (
+            update(food_memory)
+            .where(food_memory.c.user_key == user_key)
+            .where(food_memory.c.normalized_name == normalized_name)
+            .values(
+                aliases=func.array_remove(food_memory.c.aliases, alias),
+                updated_at=now,
+            )
+            .returning(*_row_columns())
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        return dict(row) if row else None

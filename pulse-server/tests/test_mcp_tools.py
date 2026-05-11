@@ -27,6 +27,8 @@ async def test_build_mcp_registers_expected_tools() -> None:
         "remember_food",
         "forget_food",
         "list_remembered_foods",
+        "add_food_alias",
+        "remove_food_alias",
         "create_meal",
         "list_meals",
         "get_meal",
@@ -36,6 +38,8 @@ async def test_build_mcp_registers_expected_tools() -> None:
         "update_meal_item",
         "delete_meal_item",
         "log_meal",
+        "add_meal_alias",
+        "remove_meal_alias",
     }
     assert expected.issubset(names)
 
@@ -50,3 +54,10 @@ async def test_build_mcp_emits_workflow_instructions() -> None:
     assert "resolve_food" in mcp.instructions
     assert "list_meals" in mcp.instructions
     assert WORKFLOW_INSTRUCTIONS in mcp.instructions
+
+
+@pytest.mark.asyncio
+async def test_workflow_instructions_mention_aliases() -> None:
+    from diet_tracker_server.mcp.server import WORKFLOW_INSTRUCTIONS
+    assert "add_meal_alias" in WORKFLOW_INSTRUCTIONS
+    assert "add_food_alias" in WORKFLOW_INSTRUCTIONS

@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from diet_tracker_server.db import transaction
@@ -14,6 +15,7 @@ from diet_tracker_server.models import (
     MealItemCreate,
 )
 from diet_tracker_server.repositories.meals import MealsRepository
+from diet_tracker_server.repositories.tables import meals as meals_table
 from diet_tracker_server.services.entries_service import create_entries_with_side_effects
 from diet_tracker_server.services.normalize import normalize_name
 
@@ -61,12 +63,26 @@ async def create_meal_with_items(
     for item in payload.items:
         _validate_item_source(item)
 
+    normalized_aliases = normalize_alias_list(
+        list(payload.aliases),
+        canonical_normalized_name=normalize_name(payload.name),
+    )
+    # Validate each alias against existing meals (collision pre-check)
+    for a in normalized_aliases:
+        try:
+            await assert_meal_alias_available(
+                session=session, user_key=user_key, alias=a, exclude_meal_id=None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     meal_row = await repo.create_meal(
         user_key=user_key,
         name=payload.name,
         normalized_name=normalize_name(payload.name),
         notes=payload.notes,
         now=now,
+        aliases=normalized_aliases if normalized_aliases else None,
     )
     item_rows: list[dict[str, Any]] = []
     for index, item in enumerate(payload.items):
@@ -152,3 +168,41 @@ async def log_meal(
 
 def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
+
+
+def normalize_alias_list(aliases: list[str], canonical_normalized_name: str) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in aliases:
+        norm = normalize_name(raw)
+        if not norm or norm == canonical_normalized_name or norm in seen:
+            continue
+        seen.add(norm)
+        out.append(norm)
+    return out
+
+
+async def assert_meal_alias_available(
+    session: AsyncSession,
+    user_key: str,
+    alias: str,
+    exclude_meal_id: UUID | None,
+) -> None:
+    stmt = (
+        select(meals_table.c.normalized_name)
+        .where(meals_table.c.user_key == user_key)
+        .where(
+            or_(
+                meals_table.c.normalized_name == alias,
+                meals_table.c.aliases.any(alias),
+            )
+        )
+    )
+    if exclude_meal_id is not None:
+        stmt = stmt.where(meals_table.c.id != exclude_meal_id)
+    result = await session.execute(stmt)
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        raise ValueError(
+            f"alias '{alias}' is already used by meal '{existing}'"
+        )

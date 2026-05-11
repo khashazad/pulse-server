@@ -42,8 +42,17 @@ from diet_tracker_server.repositories.meals import MealsRepository
 from diet_tracker_server.repositories.targets import TargetsRepository
 from diet_tracker_server.services.custom_foods_service import upsert_custom_food_and_remember
 from diet_tracker_server.services.entries_service import create_entries_with_side_effects
-from diet_tracker_server.services.food_memory_service import resolve_food_by_name
-from diet_tracker_server.services.meals_service import create_meal_with_items, log_meal as log_meal_service
+from diet_tracker_server.services.food_memory_service import (
+    assert_food_alias_available,
+    normalize_alias_list,
+    resolve_food_by_name,
+)
+from diet_tracker_server.services.meals_service import (
+    assert_meal_alias_available,
+    create_meal_with_items,
+    log_meal as log_meal_service,
+    normalize_alias_list as normalize_meal_alias_list,
+)
 from diet_tracker_server.services.normalize import normalize_name
 from diet_tracker_server.services.summary_service import build_daily_summary
 
@@ -69,7 +78,15 @@ Diet tracking workflow. Follow this order on every food-related interaction:
    the same name resolves directly. For corrections backed by a photo or user-provided
    macros (no USDA equivalent), call `save_custom_food` which auto-remembers.
 
-5) PHOTO / MANUAL MACROS. When the user provides macros directly (via photo or text)
+5) AUTO-ALIAS ON NAME DRIFT. When the user refers to an existing memory entry or saved
+   meal under a phrasing that didn't exact-match (you matched it from `list_meals` /
+   `list_remembered_foods` context, not from `resolve_food` / `get_meal` returning it
+   directly), call `add_meal_alias` or `add_food_alias` with the user's phrasing after
+   logging. Skip if the phrasing is generic ("breakfast", "lunch", "the usual") or if
+   the user explicitly disambiguated this turn. Skip if you're not confident the
+   phrasing should always map to the same entity.
+
+6) PHOTO / MANUAL MACROS. When the user provides macros directly (via photo or text)
    without a USDA reference, call `save_custom_food` with `basis="per_serving"` (default
    for photo-derived foods) — this creates the custom food and writes memory in one step.
    Then call `log_food` with the returned `custom_food_id`.
@@ -175,6 +192,7 @@ def _food_memory_entry(row: dict[str, Any]) -> FoodMemoryEntry:
         protein_g=None if row["protein_g"] is None else float(row["protein_g"]),
         carbs_g=None if row["carbs_g"] is None else float(row["carbs_g"]),
         fat_g=None if row["fat_g"] is None else float(row["fat_g"]),
+        aliases=list(row.get("aliases") or []),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -209,6 +227,7 @@ def _meal_response(meal_row: dict[str, Any], item_rows: list[dict[str, Any]]) ->
         name=meal_row["name"],
         normalized_name=meal_row["normalized_name"],
         notes=meal_row["notes"],
+        aliases=list(meal_row.get("aliases") or []),
         created_at=meal_row["created_at"],
         updated_at=meal_row["updated_at"],
         items=[_meal_item_response(r) for r in item_rows],
@@ -664,22 +683,35 @@ def build_mcp(usda_getter) -> FastMCP:
         fat_g: float = Field(ge=0),
         serving_size: float | None = None,
         serving_size_unit: str | None = None,
+        aliases: list[str] | None = None,
     ) -> FoodMemoryEntry:
-        """Save a USDA pointer keyed by `name`. Call this AFTER the user corrects your USDA
-        choice so future mentions of `name` resolve directly. Macros must be at the indicated
+        """Save a USDA pointer keyed by `name`. Optionally provide `aliases` (additional
+        phrasings that should resolve to the same entry). Macros must be at the indicated
         `basis` (NOT scaled to a previous quantity).
-
-        For custom foods (photo / manual macros), use `save_custom_food` instead — that path
-        writes memory automatically.
         """
         now = DateTimeValue.now(tz=tz)
+        normalized = normalize_name(name)
+        cleaned_aliases: list[str] | None = None
+        if aliases is not None:
+            cleaned_aliases = normalize_alias_list(aliases, canonical_normalized_name=normalized)
         async with get_session() as session:
-            repo = FoodMemoryRepository(session)
             async with transaction(session):
+                if cleaned_aliases:
+                    for a in cleaned_aliases:
+                        try:
+                            await assert_food_alias_available(
+                                session=session,
+                                user_key=user_key,
+                                alias=a,
+                                exclude_normalized_name=normalized,
+                            )
+                        except ValueError as exc:
+                            raise ToolError(str(exc)) from exc
+                repo = FoodMemoryRepository(session)
                 row = await repo.upsert_usda(
                     user_key=user_key,
                     name=name,
-                    normalized_name=normalize_name(name),
+                    normalized_name=normalized,
                     usda_fdc_id=fdc_id,
                     usda_description=usda_description,
                     basis=basis,
@@ -690,6 +722,7 @@ def build_mcp(usda_getter) -> FastMCP:
                     carbs_g=carbs_g,
                     fat_g=fat_g,
                     now=now,
+                    aliases=cleaned_aliases,
                 )
         return _food_memory_entry(row)
 
@@ -710,6 +743,65 @@ def build_mcp(usda_getter) -> FastMCP:
             rows = await repo.list_for_user(user_key)
         return [_food_memory_entry(r) for r in rows]
 
+    @mcp.tool
+    async def add_food_alias(name: str, alias: str) -> FoodMemoryEntry:
+        """Add an alternate phrasing for an existing food memory entry. Looks up the entry
+        by canonical `name` (normalized) and appends a normalized `alias` to its aliases.
+        Fails when the alias is already used as a canonical name or alias by another entry.
+        """
+        normalized_name = normalize_name(name)
+        normalized_alias = normalize_name(alias)
+        if not normalized_alias:
+            raise ToolError("Alias must be non-empty after normalization")
+        if normalized_alias == normalized_name:
+            async with get_session() as session:
+                repo = FoodMemoryRepository(session)
+                row = await repo.get_by_name(user_key=user_key, normalized_name=normalized_name)
+            if row is None:
+                raise ToolError("Food memory not found")
+            return _food_memory_entry(row)
+        now = DateTimeValue.now(tz=tz)
+        async with get_session() as session:
+            async with transaction(session):
+                try:
+                    await assert_food_alias_available(
+                        session=session,
+                        user_key=user_key,
+                        alias=normalized_alias,
+                        exclude_normalized_name=normalized_name,
+                    )
+                except ValueError as exc:
+                    raise ToolError(str(exc)) from exc
+                repo = FoodMemoryRepository(session)
+                row = await repo.add_alias(
+                    user_key=user_key,
+                    normalized_name=normalized_name,
+                    alias=normalized_alias,
+                    now=now,
+                )
+            if row is None:
+                raise ToolError("Food memory not found")
+        return _food_memory_entry(row)
+
+    @mcp.tool
+    async def remove_food_alias(name: str, alias: str) -> FoodMemoryEntry:
+        """Remove an alternate phrasing from an existing food memory entry. No-op if absent."""
+        normalized_name = normalize_name(name)
+        normalized_alias = normalize_name(alias)
+        now = DateTimeValue.now(tz=tz)
+        async with get_session() as session:
+            repo = FoodMemoryRepository(session)
+            async with transaction(session):
+                row = await repo.remove_alias(
+                    user_key=user_key,
+                    normalized_name=normalized_name,
+                    alias=normalized_alias,
+                    now=now,
+                )
+            if row is None:
+                raise ToolError("Food memory not found")
+        return _food_memory_entry(row)
+
     # ---------------- meals ----------------
 
     @mcp.tool
@@ -717,11 +809,13 @@ def build_mcp(usda_getter) -> FastMCP:
         name: str,
         items: list[MealItemCreate],
         notes: str | None = None,
+        aliases: list[str] | None = None,
     ) -> MealResponse:
         """Create a reusable meal with pre-scaled item macros. Each item must specify exactly
-        one of `usda_fdc_id` (+ `usda_description`) or `custom_food_id`.
+        one of `usda_fdc_id` (+ `usda_description`) or `custom_food_id`. Optionally provide
+        `aliases` to register alternate phrasings that resolve to this meal.
         """
-        payload = MealCreate(name=name, notes=notes, items=items)
+        payload = MealCreate(name=name, notes=notes, items=items, aliases=list(aliases or []))
         now = DateTimeValue.now(tz=tz)
         async with get_session() as session:
             try:
@@ -731,6 +825,8 @@ def build_mcp(usda_getter) -> FastMCP:
                     )
             except IntegrityError as exc:
                 raise ToolError("Meal name already exists for this user") from exc
+            except HTTPException as exc:
+                raise ToolError(str(exc.detail)) from exc
         return _meal_response(meal_row, item_rows)
 
     @mcp.tool
@@ -747,6 +843,7 @@ def build_mcp(usda_getter) -> FastMCP:
                 name=row["name"],
                 normalized_name=row["normalized_name"],
                 notes=row["notes"],
+                aliases=list(row.get("aliases") or []),
                 item_count=int(row["item_count"]),
                 total_calories=int(row["total_calories"]),
                 total_protein_g=float(row["total_protein_g"]),
@@ -923,6 +1020,72 @@ def build_mcp(usda_getter) -> FastMCP:
                     raise ToolError("Meal not found")
                 deleted = await repo.delete_meal_item(item_uuid, meal_uuid)
         return {"deleted": deleted}
+
+    @mcp.tool
+    async def add_meal_alias(meal_id: str, alias: str) -> MealResponse:
+        """Add an alternate phrasing for an existing meal. Looks up by `meal_id` and
+        appends a normalized `alias`. Fails when the alias is already used as a canonical
+        name or alias by another meal.
+        """
+        try:
+            meal_uuid = UUID(meal_id)
+        except ValueError as exc:
+            raise ToolError(f"Invalid meal_id '{meal_id}'") from exc
+        normalized_alias = normalize_name(alias)
+        if not normalized_alias:
+            raise ToolError("Alias must be non-empty after normalization")
+        now = DateTimeValue.now(tz=tz)
+        async with get_session() as session:
+            repo = MealsRepository(session)
+            meal_row = await repo.get_meal(meal_uuid, user_key)
+            if meal_row is None:
+                raise ToolError("Meal not found")
+            if normalized_alias == meal_row["normalized_name"]:
+                item_rows = await repo.list_items(meal_uuid)
+                return _meal_response(meal_row, item_rows)
+            async with transaction(session):
+                try:
+                    await assert_meal_alias_available(
+                        session=session,
+                        user_key=user_key,
+                        alias=normalized_alias,
+                        exclude_meal_id=meal_uuid,
+                    )
+                except ValueError as exc:
+                    raise ToolError(str(exc)) from exc
+                updated = await repo.add_alias(
+                    meal_id=meal_uuid,
+                    user_key=user_key,
+                    alias=normalized_alias,
+                    now=now,
+                )
+            if updated is None:
+                raise ToolError("Meal not found")
+            item_rows = await repo.list_items(meal_uuid)
+        return _meal_response(updated, item_rows)
+
+    @mcp.tool
+    async def remove_meal_alias(meal_id: str, alias: str) -> MealResponse:
+        """Remove an alternate phrasing from an existing meal. No-op if absent."""
+        try:
+            meal_uuid = UUID(meal_id)
+        except ValueError as exc:
+            raise ToolError(f"Invalid meal_id '{meal_id}'") from exc
+        normalized_alias = normalize_name(alias)
+        now = DateTimeValue.now(tz=tz)
+        async with get_session() as session:
+            repo = MealsRepository(session)
+            async with transaction(session):
+                updated = await repo.remove_alias(
+                    meal_id=meal_uuid,
+                    user_key=user_key,
+                    alias=normalized_alias,
+                    now=now,
+                )
+            if updated is None:
+                raise ToolError("Meal not found")
+            item_rows = await repo.list_items(meal_uuid)
+        return _meal_response(updated, item_rows)
 
     @mcp.tool
     async def log_meal(

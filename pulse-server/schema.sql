@@ -201,3 +201,96 @@ create table if not exists containers (
 );
 create unique index if not exists idx_containers_user_key_name on containers(user_key, normalized_name);
 create index if not exists idx_containers_user_key on containers(user_key);
+
+alter table food_memory add column if not exists aliases text[] not null default '{}'::text[];
+alter table meals add column if not exists aliases text[] not null default '{}'::text[];
+
+create index if not exists idx_food_memory_aliases on food_memory using gin (aliases);
+create index if not exists idx_meals_aliases on meals using gin (aliases);
+
+do $body$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'food_memory_alias_not_self') then
+    alter table food_memory add constraint food_memory_alias_not_self
+      check (not (normalized_name = ANY(aliases)));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'meals_alias_not_self') then
+    alter table meals add constraint meals_alias_not_self
+      check (not (normalized_name = ANY(aliases)));
+  end if;
+end
+$body$;
+
+create or replace function check_food_memory_alias_uniqueness() returns trigger
+language plpgsql as $$
+declare
+  collision_name text;
+begin
+  if NEW.aliases is not null and array_length(NEW.aliases, 1) is not null then
+    select normalized_name into collision_name from food_memory
+    where user_key = NEW.user_key and id is distinct from NEW.id
+      and normalized_name = ANY(NEW.aliases)
+    limit 1;
+    if collision_name is not null then
+      raise exception 'alias collides with canonical name %', collision_name using errcode = '23505';
+    end if;
+    select normalized_name into collision_name from food_memory
+    where user_key = NEW.user_key and id is distinct from NEW.id
+      and aliases && NEW.aliases
+    limit 1;
+    if collision_name is not null then
+      raise exception 'alias collides with alias of %', collision_name using errcode = '23505';
+    end if;
+  end if;
+  select normalized_name into collision_name from food_memory
+  where user_key = NEW.user_key and id is distinct from NEW.id
+    and NEW.normalized_name = ANY(aliases)
+  limit 1;
+  if collision_name is not null then
+    raise exception 'name collides with alias of %', collision_name using errcode = '23505';
+  end if;
+  return NEW;
+end;
+$$;
+
+create or replace function check_meals_alias_uniqueness() returns trigger
+language plpgsql as $$
+declare
+  collision_name text;
+begin
+  if NEW.aliases is not null and array_length(NEW.aliases, 1) is not null then
+    select normalized_name into collision_name from meals
+    where user_key = NEW.user_key and id is distinct from NEW.id
+      and normalized_name = ANY(NEW.aliases)
+    limit 1;
+    if collision_name is not null then
+      raise exception 'alias collides with canonical name %', collision_name using errcode = '23505';
+    end if;
+    select normalized_name into collision_name from meals
+    where user_key = NEW.user_key and id is distinct from NEW.id
+      and aliases && NEW.aliases
+    limit 1;
+    if collision_name is not null then
+      raise exception 'alias collides with alias of %', collision_name using errcode = '23505';
+    end if;
+  end if;
+  select normalized_name into collision_name from meals
+  where user_key = NEW.user_key and id is distinct from NEW.id
+    and NEW.normalized_name = ANY(aliases)
+  limit 1;
+  if collision_name is not null then
+    raise exception 'name collides with alias of %', collision_name using errcode = '23505';
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists food_memory_alias_uniqueness on food_memory;
+create trigger food_memory_alias_uniqueness
+  before insert or update on food_memory
+  for each row execute function check_food_memory_alias_uniqueness();
+
+drop trigger if exists meals_alias_uniqueness on meals;
+create trigger meals_alias_uniqueness
+  before insert or update on meals
+  for each row execute function check_meals_alias_uniqueness();

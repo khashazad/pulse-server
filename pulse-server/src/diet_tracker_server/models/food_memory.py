@@ -46,6 +46,7 @@ class FoodMemoryEntry(BaseModel):
     protein_g: float | None = None
     carbs_g: float | None = None
     fat_g: float | None = None
+    aliases: list[str] = Field(default_factory=list)
     created_at: DateTimeValue
     updated_at: DateTimeValue
 

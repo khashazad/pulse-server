@@ -4,7 +4,7 @@ from datetime import datetime as DateTimeValue
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Integer, cast, delete, func, select, update
+from sqlalchemy import Integer, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ def _meal_columns() -> tuple[Any, ...]:
         meals.c.name,
         meals.c.normalized_name,
         meals.c.notes,
+        meals.c.aliases,
         meals.c.created_at,
         meals.c.updated_at,
     )
@@ -56,17 +57,21 @@ class MealsRepository:
         normalized_name: str,
         notes: str | None,
         now: DateTimeValue,
+        aliases: list[str] | None = None,
     ) -> dict[str, Any]:
+        values: dict[str, Any] = dict(
+            user_key=user_key,
+            name=name,
+            normalized_name=normalized_name,
+            notes=notes,
+            created_at=now,
+            updated_at=now,
+        )
+        if aliases is not None:
+            values["aliases"] = aliases
         stmt = (
             pg_insert(meals)
-            .values(
-                user_key=user_key,
-                name=name,
-                normalized_name=normalized_name,
-                notes=notes,
-                created_at=now,
-                updated_at=now,
-            )
+            .values(**values)
             .returning(*_meal_columns())
         )
         result = await self._session.execute(stmt)
@@ -130,12 +135,17 @@ class MealsRepository:
         row = result.mappings().first()
         return dict(row) if row else None
 
-    # Summary: Fetches a meal by normalized name for a user.
+    # Summary: Fetches a meal by normalized name or alias for a user.
     async def get_meal_by_name(self, user_key: str, normalized_name: str) -> dict[str, Any] | None:
         stmt = (
             select(*_meal_columns())
             .where(meals.c.user_key == user_key)
-            .where(meals.c.normalized_name == normalized_name)
+            .where(
+                or_(
+                    meals.c.normalized_name == normalized_name,
+                    meals.c.aliases.any(normalized_name),
+                )
+            )
         )
         result = await self._session.execute(stmt)
         row = result.mappings().first()
@@ -149,6 +159,7 @@ class MealsRepository:
                 meals.c.name,
                 meals.c.normalized_name,
                 meals.c.notes,
+                meals.c.aliases,
                 func.count(meal_items.c.id).label("item_count"),
                 cast(func.coalesce(func.sum(meal_items.c.calories), 0), Integer).label("total_calories"),
                 func.coalesce(func.sum(meal_items.c.protein_g), 0).label("total_protein_g"),
@@ -157,7 +168,7 @@ class MealsRepository:
             )
             .select_from(meals.outerjoin(meal_items, meal_items.c.meal_id == meals.c.id))
             .where(meals.c.user_key == user_key)
-            .group_by(meals.c.id, meals.c.name, meals.c.normalized_name, meals.c.notes)
+            .group_by(meals.c.id, meals.c.name, meals.c.normalized_name, meals.c.notes, meals.c.aliases)
             .order_by(meals.c.normalized_name)
         )
         result = await self._session.execute(stmt)
@@ -243,3 +254,51 @@ class MealsRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+    # Summary: Appends `alias` to the meal's aliases array if not already present.
+    async def add_alias(
+        self,
+        meal_id: UUID,
+        user_key: str,
+        alias: str,
+        now: DateTimeValue,
+    ) -> dict[str, Any] | None:
+        stmt = (
+            update(meals)
+            .where(meals.c.id == meal_id)
+            .where(meals.c.user_key == user_key)
+            .values(
+                aliases=func.array(
+                    select(func.unnest(func.array_append(meals.c.aliases, alias)))
+                    .distinct()
+                    .scalar_subquery()
+                ),
+                updated_at=now,
+            )
+            .returning(*_meal_columns())
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+    # Summary: Removes `alias` from the meal's aliases array. No-op if absent.
+    async def remove_alias(
+        self,
+        meal_id: UUID,
+        user_key: str,
+        alias: str,
+        now: DateTimeValue,
+    ) -> dict[str, Any] | None:
+        stmt = (
+            update(meals)
+            .where(meals.c.id == meal_id)
+            .where(meals.c.user_key == user_key)
+            .values(
+                aliases=func.array_remove(meals.c.aliases, alias),
+                updated_at=now,
+            )
+            .returning(*_meal_columns())
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        return dict(row) if row else None
