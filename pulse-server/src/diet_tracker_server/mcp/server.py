@@ -76,7 +76,15 @@ Diet tracking workflow. Follow this order on every food-related interaction:
    the same name resolves directly. For corrections backed by a photo or user-provided
    macros (no USDA equivalent), call `save_custom_food` which auto-remembers.
 
-5) PHOTO / MANUAL MACROS. When the user provides macros directly (via photo or text)
+5) AUTO-ALIAS ON NAME DRIFT. When the user refers to an existing memory entry or saved
+   meal under a phrasing that didn't exact-match (you matched it from `list_meals` /
+   `list_remembered_foods` context, not from `resolve_food` / `get_meal` returning it
+   directly), call `add_meal_alias` or `add_food_alias` with the user's phrasing after
+   logging. Skip if the phrasing is generic ("breakfast", "lunch", "the usual") or if
+   the user explicitly disambiguated this turn. Skip if you're not confident the
+   phrasing should always map to the same entity.
+
+6) PHOTO / MANUAL MACROS. When the user provides macros directly (via photo or text)
    without a USDA reference, call `save_custom_food` with `basis="per_serving"` (default
    for photo-derived foods) — this creates the custom food and writes memory in one step.
    Then call `log_food` with the returned `custom_food_id`.

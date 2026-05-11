@@ -66,3 +66,10 @@ def test_api_key_middleware_imports_cleanly() -> None:
 
     mw = ApiKeyMiddleware("secret")
     assert mw._configured_key == "secret"
+
+
+@pytest.mark.asyncio
+async def test_workflow_instructions_mention_aliases() -> None:
+    from diet_tracker_server.mcp.server import WORKFLOW_INSTRUCTIONS
+    assert "add_meal_alias" in WORKFLOW_INSTRUCTIONS
+    assert "add_food_alias" in WORKFLOW_INSTRUCTIONS
