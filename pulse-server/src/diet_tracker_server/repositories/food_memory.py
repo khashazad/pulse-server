@@ -4,7 +4,7 @@ from datetime import datetime as DateTimeValue
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ def _row_columns() -> tuple[Any, ...]:
         food_memory.c.protein_g,
         food_memory.c.carbs_g,
         food_memory.c.fat_g,
+        food_memory.c.aliases,
         food_memory.c.created_at,
         food_memory.c.updated_at,
     )
@@ -192,7 +193,12 @@ class FoodMemoryRepository:
             )
             .select_from(food_memory.outerjoin(custom_foods, custom_foods.c.id == food_memory.c.custom_food_id))
             .where(food_memory.c.user_key == user_key)
-            .where(food_memory.c.normalized_name == normalized_name)
+            .where(
+                or_(
+                    food_memory.c.normalized_name == normalized_name,
+                    food_memory.c.aliases.any(normalized_name),
+                )
+            )
         )
         result = await self._session.execute(stmt)
         row = result.mappings().first()

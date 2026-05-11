@@ -148,3 +148,26 @@ async def test_meals_trigger_rejects_alias_overlap(session: AsyncSession) -> Non
             {"uk": user_key, "now": now},
         )
         await session.commit()
+
+
+from diet_tracker_server.repositories.food_memory import FoodMemoryRepository
+
+
+@pytest.mark.asyncio
+async def test_food_memory_get_by_name_matches_alias(session: AsyncSession) -> None:
+    user_key = f"user-{uuid.uuid4()}"
+    now = DateTimeValue.now(tz=TimezoneValue.utc)
+    await session.execute(
+        text(
+            "insert into food_memory (user_key, name, normalized_name, usda_fdc_id, usda_description, basis, calories, protein_g, carbs_g, fat_g, aliases, created_at, updated_at) "
+            "values (:uk, 'Peanut Butter', 'peanut butter', 1, 'PB', 'per_100g', 100, 1, 1, 1, ARRAY['pb', 'pbs']::text[], :now, :now)"
+        ),
+        {"uk": user_key, "now": now},
+    )
+    await session.commit()
+
+    repo = FoodMemoryRepository(session)
+    row = await repo.get_by_name(user_key=user_key, normalized_name="pb")
+    assert row is not None
+    assert row["normalized_name"] == "peanut butter"
+    assert list(row["aliases"]) == ["pb", "pbs"]
