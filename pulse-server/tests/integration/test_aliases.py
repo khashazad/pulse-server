@@ -275,3 +275,48 @@ async def test_food_memory_remove_alias(session: AsyncSession) -> None:
     )
     await session.commit()
     assert list(updated["aliases"]) == ["pbs"]
+
+
+@pytest.mark.asyncio
+async def test_meals_add_alias_appends(session: AsyncSession) -> None:
+    user_key = f"user-{uuid.uuid4()}"
+    now = DateTimeValue.now(tz=TimezoneValue.utc)
+    result = await session.execute(
+        text(
+            "insert into meals (user_key, name, normalized_name, created_at, updated_at) "
+            "values (:uk, 'Wrap', 'wrap', :now, :now) returning id"
+        ),
+        {"uk": user_key, "now": now},
+    )
+    meal_id = result.scalar_one()
+    await session.commit()
+
+    repo = MealsRepository(session)
+    updated = await repo.add_alias(
+        meal_id=meal_id, user_key=user_key, alias="the wrap", now=now,
+    )
+    await session.commit()
+    assert updated is not None
+    assert list(updated["aliases"]) == ["the wrap"]
+
+
+@pytest.mark.asyncio
+async def test_meals_remove_alias(session: AsyncSession) -> None:
+    user_key = f"user-{uuid.uuid4()}"
+    now = DateTimeValue.now(tz=TimezoneValue.utc)
+    result = await session.execute(
+        text(
+            "insert into meals (user_key, name, normalized_name, aliases, created_at, updated_at) "
+            "values (:uk, 'Wrap', 'wrap', ARRAY['the wrap', 'lunch']::text[], :now, :now) returning id"
+        ),
+        {"uk": user_key, "now": now},
+    )
+    meal_id = result.scalar_one()
+    await session.commit()
+
+    repo = MealsRepository(session)
+    updated = await repo.remove_alias(
+        meal_id=meal_id, user_key=user_key, alias="the wrap", now=now,
+    )
+    await session.commit()
+    assert list(updated["aliases"]) == ["lunch"]

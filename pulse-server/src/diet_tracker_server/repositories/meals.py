@@ -250,3 +250,51 @@ class MealsRepository:
         )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+    # Summary: Appends `alias` to the meal's aliases array if not already present.
+    async def add_alias(
+        self,
+        meal_id: UUID,
+        user_key: str,
+        alias: str,
+        now: DateTimeValue,
+    ) -> dict[str, Any] | None:
+        stmt = (
+            update(meals)
+            .where(meals.c.id == meal_id)
+            .where(meals.c.user_key == user_key)
+            .values(
+                aliases=func.array(
+                    select(func.unnest(func.array_append(meals.c.aliases, alias)))
+                    .distinct()
+                    .scalar_subquery()
+                ),
+                updated_at=now,
+            )
+            .returning(*_meal_columns())
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+    # Summary: Removes `alias` from the meal's aliases array. No-op if absent.
+    async def remove_alias(
+        self,
+        meal_id: UUID,
+        user_key: str,
+        alias: str,
+        now: DateTimeValue,
+    ) -> dict[str, Any] | None:
+        stmt = (
+            update(meals)
+            .where(meals.c.id == meal_id)
+            .where(meals.c.user_key == user_key)
+            .values(
+                aliases=func.array_remove(meals.c.aliases, alias),
+                updated_at=now,
+            )
+            .returning(*_meal_columns())
+        )
+        result = await self._session.execute(stmt)
+        row = result.mappings().first()
+        return dict(row) if row else None
