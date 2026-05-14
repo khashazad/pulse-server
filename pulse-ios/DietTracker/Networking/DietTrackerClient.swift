@@ -164,6 +164,12 @@ actor DietTrackerClient {
         return try await fetch(url: url)
     }
 
+    func upsertTargets(_ targets: MacroTargets) async throws -> MacroTargets {
+        let url = try makeURL(path: "/targets", query: [])
+        let body = try JSONEncoder().encode(targets)
+        return try await sendJSON(url: url, method: "PUT", body: body)
+    }
+
     // MARK: - auth endpoints
 
     func whoami() async throws -> WhoAmI {
