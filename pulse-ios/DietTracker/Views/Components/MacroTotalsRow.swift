@@ -69,7 +69,7 @@ struct MacroTotalsRow: View {
 #Preview {
     MacroTotalsRow(
         totals: MacroTotals(calories: 1240, proteinG: 92, carbsG: 138, fatG: 42),
-        targets: MacroTargets(calories: 2200, proteinG: 150, carbsG: 250, fatG: 70)
+        targets: MacroTargets(calories: 2200, proteinG: 150, carbsG: 250, fatG: 70, targetWeightLb: nil)
     )
     .padding()
     .background(Theme.BG.primary)
