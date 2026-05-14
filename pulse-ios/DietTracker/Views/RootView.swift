@@ -7,6 +7,7 @@ struct RootView: View {
     @State private var intakePath = NavigationPath()
     @State private var mealsPath = NavigationPath()
     @State private var prepPath = NavigationPath()
+    @State private var weightPath = NavigationPath()
     @State private var showSettings = false
 
     var body: some View {
@@ -42,6 +43,11 @@ struct RootView: View {
                         PrepView()
                             .toolbar { settingsButton }
                     }
+                case .weight:
+                    NavigationStack(path: $weightPath) {
+                        WeightTabRootView()
+                            .toolbar { settingsButton }
+                    }
                 }
             }
 
@@ -66,8 +72,9 @@ struct RootView: View {
     private var dockVisible: Bool {
         switch tab {
         case .intake: intakePath.isEmpty
-        case .meals: mealsPath.isEmpty
-        case .prep:  prepPath.isEmpty
+        case .meals:  mealsPath.isEmpty
+        case .prep:   prepPath.isEmpty
+        case .weight: weightPath.isEmpty
         }
     }
 
