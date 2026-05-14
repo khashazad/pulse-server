@@ -107,6 +107,13 @@ struct SettingsView: View {
                                     }
                                     .pickerStyle(.segmented)
                                     .frame(width: 90)
+                                    .onChange(of: targetUnit) { oldUnit, newUnit in
+                                        guard oldUnit != newUnit,
+                                              let v = Double(targetWeightInput.replacingOccurrences(of: ",", with: "."))
+                                        else { return }
+                                        let lb = WeightFormatter.toLb(v, from: oldUnit)
+                                        targetWeightInput = String(format: "%.1f", WeightFormatter.fromLb(lb, to: newUnit))
+                                    }
                                 }
                             }
                             Rectangle().fill(Theme.separator).frame(height: 0.5)
