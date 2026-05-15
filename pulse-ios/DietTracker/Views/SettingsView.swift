@@ -4,6 +4,35 @@ struct SettingsView: View {
     @Environment(AuthSession.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
+    @State private var targetWeightInput: String = ""
+    @State private var targetUnit: WeightUnit = .lb
+    @AppStorage(WeightUnit.displayPreferenceKey)
+    private var displayUnitRaw: String = WeightUnit.defaultDisplayUnit.rawValue
+
+    private var isTargetValid: Bool {
+        guard let v = Double(targetWeightInput.replacingOccurrences(of: ",", with: ".")) else { return false }
+        return v > 0 && v < 2000
+    }
+
+    private func saveTarget() async {
+        guard let v = Double(targetWeightInput.replacingOccurrences(of: ",", with: ".")) else { return }
+        let lb = WeightFormatter.toLb(v, from: targetUnit)
+        guard let client = auth.makeClient() else { return }
+        do {
+            let current = try await client.fetchTargets()
+            let updated = MacroTargets(
+                calories: current.calories,
+                proteinG: current.proteinG,
+                carbsG: current.carbsG,
+                fatG: current.fatG,
+                targetWeightLb: lb
+            )
+            _ = try await client.upsertTargets(updated)
+        } catch {
+            // Silent failure on save — user can retry. Matches existing macro-target save behavior.
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -62,8 +91,63 @@ struct SettingsView: View {
                                     .foregroundStyle(Theme.FG.secondary)
                             }
                         }
+
+                        section(header: "Weight goal") {
+                            row(label: "Target weight") {
+                                HStack(spacing: 8) {
+                                    TextField("e.g. 170", text: $targetWeightInput)
+                                        .keyboardType(.decimalPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 80)
+                                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(Theme.FG.primary)
+                                    Picker("Unit", selection: $targetUnit) {
+                                        Text("lb").tag(WeightUnit.lb)
+                                        Text("kg").tag(WeightUnit.kg)
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .frame(width: 90)
+                                    .onChange(of: targetUnit) { oldUnit, newUnit in
+                                        guard oldUnit != newUnit,
+                                              let v = Double(targetWeightInput.replacingOccurrences(of: ",", with: "."))
+                                        else { return }
+                                        let lb = WeightFormatter.toLb(v, from: oldUnit)
+                                        targetWeightInput = String(format: "%.1f", WeightFormatter.fromLb(lb, to: newUnit))
+                                    }
+                                }
+                            }
+                            Rectangle().fill(Theme.separator).frame(height: 0.5)
+                            HStack {
+                                Spacer()
+                                Button("Save target") { Task { await saveTarget() } }
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(isTargetValid ? Theme.CTP.mauve : Theme.FG.tertiary)
+                                    .disabled(!isTargetValid)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                            }
+                        }
+
+                        section(header: "Display unit") {
+                            row(label: "Weight unit") {
+                                Picker("Display unit", selection: $displayUnitRaw) {
+                                    Text("lb").tag(WeightUnit.lb.rawValue)
+                                    Text("kg").tag(WeightUnit.kg.rawValue)
+                                }
+                                .pickerStyle(.segmented)
+                                .frame(width: 110)
+                            }
+                        }
                     }
                     .padding(.vertical, 16)
+                }
+            }
+            .task {
+                guard let client = auth.makeClient() else { return }
+                if let current = try? await client.fetchTargets() {
+                    if let lb = current.targetWeightLb {
+                        targetWeightInput = String(format: "%.1f", WeightFormatter.fromLb(lb, to: targetUnit))
+                    }
                 }
             }
             .navigationTitle("Settings")

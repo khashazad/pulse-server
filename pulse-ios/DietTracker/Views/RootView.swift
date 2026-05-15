@@ -3,10 +3,11 @@ import SwiftUI
 struct RootView: View {
     @Environment(AuthSession.self) private var auth
 
-    @State private var tab: DockTab = .log
-    @State private var logPath = NavigationPath()
+    @State private var tab: DockTab = .intake
+    @State private var intakePath = NavigationPath()
     @State private var mealsPath = NavigationPath()
     @State private var prepPath = NavigationPath()
+    @State private var weightPath = NavigationPath()
     @State private var showSettings = false
 
     var body: some View {
@@ -15,10 +16,10 @@ struct RootView: View {
 
             Group {
                 switch tab {
-                case .log:
-                    NavigationStack(path: $logPath) {
+                case .intake:
+                    NavigationStack(path: $intakePath) {
                         LogView(onOpenDate: { picked in
-                            logPath.append(picked)
+                            intakePath.append(picked)
                         })
                         .toolbar { settingsButton }
                         .navigationDestination(for: Date.self) { date in
@@ -40,6 +41,11 @@ struct RootView: View {
                 case .prep:
                     NavigationStack(path: $prepPath) {
                         PrepView()
+                            .toolbar { settingsButton }
+                    }
+                case .weight:
+                    NavigationStack(path: $weightPath) {
+                        WeightTabRootView()
                             .toolbar { settingsButton }
                     }
                 }
@@ -65,9 +71,10 @@ struct RootView: View {
 
     private var dockVisible: Bool {
         switch tab {
-        case .log:   logPath.isEmpty
-        case .meals: mealsPath.isEmpty
-        case .prep:  prepPath.isEmpty
+        case .intake: intakePath.isEmpty
+        case .meals:  mealsPath.isEmpty
+        case .prep:   prepPath.isEmpty
+        case .weight: weightPath.isEmpty
         }
     }
 
