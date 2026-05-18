@@ -17,6 +17,33 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # The legacy `progress_photos` table was originally only created via
+    # `schema.sql` bootstrap and never had a dedicated Alembic migration.
+    # On a fresh DB (e.g. CI's `alembic upgrade head`) it does not exist yet,
+    # so create the legacy four-slot shape here before transforming it below.
+    op.execute(
+        """
+        create table if not exists progress_photos (
+          id uuid primary key default gen_random_uuid(),
+          user_key text not null,
+          log_date date not null,
+          slot text not null check (slot in ('front','left','right','back')),
+          photo bytea not null,
+          photo_thumb bytea not null,
+          photo_mime text not null default 'image/jpeg',
+          bytes integer not null,
+          sha256 text not null,
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now(),
+          unique (user_key, log_date, slot)
+        )
+        """
+    )
+    op.execute(
+        "create index if not exists idx_progress_photos_user_date "
+        "on progress_photos(user_key, log_date desc)"
+    )
+
     op.execute(
         """
         create table if not exists progress_photo_tags (
