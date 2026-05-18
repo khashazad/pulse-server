@@ -95,33 +95,44 @@ struct ProgressPhotosView: View {
 
     // MARK: sections
 
-    /// Photos for the selected date grouped by tag, in tag sort order. Tags
-    /// with no photos for this date are skipped to keep the screen lean.
+    /// Photos for the selected date grouped by tag. Sections are driven by
+    /// the photos themselves (not the tag catalog) so a missing/empty
+    /// `tagStore` never hides photos that exist in `ProgressPhotoStore`.
+    /// When a tag is loaded we use its name and sort order; otherwise the
+    /// section header falls back to "Tag" and groups sort to the bottom.
     private var sections: some View {
         let photos = store.photos(on: selectedDate)
-        let byTag = Dictionary(grouping: photos, by: \.tagId)
-        let orderedTags = tagStore.tags.filter { byTag[$0.id] != nil }
+        let groups: [(tagId: UUID, name: String, order: Int, photos: [ProgressPhotoMetadata])] =
+            Dictionary(grouping: photos, by: \.tagId)
+                .map { tagId, group in
+                    let tag = tagStore.tag(id: tagId)
+                    return (
+                        tagId: tagId,
+                        name: tag?.name ?? "Tag",
+                        order: tag?.sortOrder ?? Int.max,
+                        photos: group
+                    )
+                }
+                .sorted { ($0.order, $0.name) < ($1.order, $1.name) }
         return VStack(alignment: .leading, spacing: 16) {
-            if orderedTags.isEmpty {
+            if groups.isEmpty {
                 Text("No photos for this day yet.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.FG.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 24)
             } else {
-                ForEach(orderedTags) { tag in
-                    if let group = byTag[tag.id], !group.isEmpty {
-                        tagSection(tag: tag, photos: group)
-                    }
+                ForEach(groups, id: \.tagId) { group in
+                    tagSection(name: group.name, photos: group.photos)
                 }
             }
         }
     }
 
-    private func tagSection(tag: ProgressPhotoTag, photos: [ProgressPhotoMetadata]) -> some View {
+    private func tagSection(name: String, photos: [ProgressPhotoMetadata]) -> some View {
         let cols = [GridItem(.flexible()), GridItem(.flexible())]
         return VStack(alignment: .leading, spacing: 8) {
-            Text(tag.name)
+            Text(name)
                 .font(.system(size: 13, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(Theme.FG.secondary)

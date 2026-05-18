@@ -70,10 +70,15 @@ actor ProgressPhotoClient {
     }
 
     /// Uploads a JPEG tagged with `tagId` for `date` and returns the persisted metadata.
+    /// Uploads a JPEG tagged with `tagId` for `date` and returns the persisted metadata.
+    /// `idempotencyKey` lets the server dedupe retries of the same logical upload:
+    /// a second POST with the same key returns the previously-inserted row instead
+    /// of creating a duplicate. Pass `nil` for one-shot uploads that won't be retried.
     func upload(
         date: Date,
         tagId: UUID,
-        jpeg: Data
+        jpeg: Data,
+        idempotencyKey: UUID? = nil
     ) async throws -> ProgressPhotoMetadata {
         let url = try makeURL(path: "/measures/photos", query: [])
         let boundary = "----DietTrackerBoundary\(UUID().uuidString)"
@@ -81,12 +86,16 @@ actor ProgressPhotoClient {
         req.httpMethod = "POST"
         applyAuth(&req)
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var fields: [(name: String, value: String)] = [
+            ("log_date", DateOnly.string(from: date)),
+            ("tag_id", tagId.uuidString.lowercased()),
+        ]
+        if let idempotencyKey {
+            fields.append(("idempotency_key", idempotencyKey.uuidString.lowercased()))
+        }
         req.httpBody = Self.multipartBody(
             boundary: boundary,
-            fields: [
-                ("log_date", DateOnly.string(from: date)),
-                ("tag_id", tagId.uuidString.lowercased()),
-            ],
+            fields: fields,
             file: (fieldName: "file", filename: "photo.jpg", mime: "image/jpeg", data: jpeg)
         )
         let (data, http) = try await raw(request: req)

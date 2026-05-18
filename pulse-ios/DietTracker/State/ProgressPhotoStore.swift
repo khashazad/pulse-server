@@ -176,18 +176,38 @@ final class ProgressPhotoStore {
 
     private func processOne(_ item: QueuedUpload) async {
         guard let client = auth?.makeProgressPhotoClient() else { return }
-        do {
-            switch item {
-            case .single(let p):
-                let data = try Data(contentsOf: URL(fileURLWithPath: p.localPath))
-                let meta = try await client.upload(date: p.date, tagId: p.tagId, jpeg: data)
-                try cache.renameToSHA(pendingURL: URL(fileURLWithPath: p.localPath), sha: meta.sha256)
-                photos[normalize(p.date), default: []].append(meta)
-                try queue.markSuccess(id: p.id)
+        switch item {
+        case .single(let p):
+            let data: Data
+            do {
+                data = try Data(contentsOf: URL(fileURLWithPath: p.localPath))
+            } catch {
+                // Pending bytes are gone (e.g. cache cleared). Drop the entry —
+                // retrying would just loop forever on the same missing file.
+                lastError = error.localizedDescription
+                try? queue.markSuccess(id: p.id)
+                return
             }
-        } catch {
-            lastError = error.localizedDescription
-            try? queue.markFailure(id: item.id)
+            let meta: ProgressPhotoMetadata
+            do {
+                meta = try await client.upload(
+                    date: p.date,
+                    tagId: p.tagId,
+                    jpeg: data,
+                    idempotencyKey: p.id
+                )
+            } catch {
+                // True upload failure — schedule a backoff retry.
+                lastError = error.localizedDescription
+                try? queue.markFailure(id: item.id)
+                return
+            }
+            // Upload succeeded. Local bookkeeping is best-effort: a failure here
+            // would previously cause a duplicate POST, but `PendingUpload.id` is
+            // passed as the server idempotency key so re-uploads are deduped.
+            try? cache.renameToSHA(pendingURL: URL(fileURLWithPath: p.localPath), sha: meta.sha256)
+            photos[normalize(p.date), default: []].append(meta)
+            try? queue.markSuccess(id: p.id)
         }
     }
 

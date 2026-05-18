@@ -78,22 +78,8 @@ final class ProgressPhotoClientTests: XCTestCase {
         let tagId = UUID()
         let photoId = UUID()
         var capturedContentType: String?
-        var capturedBody = Data()
         StubURLProtocol.responder = { req in
             capturedContentType = req.value(forHTTPHeaderField: "Content-Type")
-            if let body = req.httpBody {
-                capturedBody = body
-            } else if let stream = req.httpBodyStream {
-                stream.open()
-                defer { stream.close() }
-                let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
-                defer { buf.deallocate() }
-                while stream.hasBytesAvailable {
-                    let n = stream.read(buf, maxLength: 1024)
-                    if n <= 0 { break }
-                    capturedBody.append(buf, count: n)
-                }
-            }
             let json = """
             {
               "id":"\(photoId.uuidString.lowercased())",
@@ -112,11 +98,42 @@ final class ProgressPhotoClientTests: XCTestCase {
         XCTAssertEqual(meta.tagId, tagId)
         XCTAssertEqual(meta.id, photoId)
         XCTAssertTrue(capturedContentType?.contains("multipart/form-data") ?? false)
-        let bodyStr = String(data: capturedBody, encoding: .utf8) ?? ""
+        let bodyStr = String(data: StubURLProtocol.lastRequestBody ?? Data(), encoding: .isoLatin1) ?? ""
         XCTAssertTrue(bodyStr.contains("name=\"log_date\""))
         XCTAssertTrue(bodyStr.contains("2026-05-17"))
         XCTAssertTrue(bodyStr.contains("name=\"tag_id\""))
         XCTAssertTrue(bodyStr.contains(tagId.uuidString.lowercased()))
+        XCTAssertFalse(
+            bodyStr.contains("name=\"idempotency_key\""),
+            "absent when caller doesn't pass one"
+        )
+    }
+
+    func testUploadIncludesIdempotencyKeyWhenProvided() async throws {
+        let tagId = UUID()
+        let photoId = UUID()
+        let idem = UUID()
+        StubURLProtocol.responder = { req in
+            let json = """
+            {
+              "id":"\(photoId.uuidString.lowercased())",
+              "date":"2026-05-17",
+              "tag_id":"\(tagId.uuidString.lowercased())",
+              "mime":"image/jpeg",
+              "bytes":3,
+              "sha256":"sha",
+              "updated_at":"2026-05-17T00:00:00Z"
+            }
+            """.data(using: .utf8)!
+            return (HTTPURLResponse(url: req.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!, json)
+        }
+        let d = DateOnly.formatter.date(from: "2026-05-17")!
+        _ = try await makeClient().upload(
+            date: d, tagId: tagId, jpeg: Data([0xFF]), idempotencyKey: idem
+        )
+        let bodyStr = String(data: StubURLProtocol.lastRequestBody ?? Data(), encoding: .isoLatin1) ?? ""
+        XCTAssertTrue(bodyStr.contains("name=\"idempotency_key\""))
+        XCTAssertTrue(bodyStr.contains(idem.uuidString.lowercased()))
     }
 
     func testDeleteSucceedsOn204() async throws {
@@ -149,20 +166,7 @@ final class ProgressPhotoClientTests: XCTestCase {
 
     func testCreateTagSendsName() async throws {
         let tagId = UUID()
-        var capturedBody = Data()
         StubURLProtocol.responder = { req in
-            if let body = req.httpBody { capturedBody = body }
-            else if let stream = req.httpBodyStream {
-                stream.open()
-                defer { stream.close() }
-                let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
-                defer { buf.deallocate() }
-                while stream.hasBytesAvailable {
-                    let n = stream.read(buf, maxLength: 1024)
-                    if n <= 0 { break }
-                    capturedBody.append(buf, count: n)
-                }
-            }
             let json = """
             {
               "id":"\(tagId.uuidString.lowercased())",
@@ -177,9 +181,8 @@ final class ProgressPhotoClientTests: XCTestCase {
         }
         let tag = try await makeClient().createTag(name: "morning")
         XCTAssertEqual(tag.id, tagId)
-        XCTAssertTrue(
-            (String(data: capturedBody, encoding: .utf8) ?? "").contains("\"morning\"")
-        )
+        let bodyStr = String(data: StubURLProtocol.lastRequestBody ?? Data(), encoding: .isoLatin1) ?? ""
+        XCTAssertTrue(bodyStr.contains("\"morning\""))
     }
 
     func testUpdateTagRenames() async throws {
