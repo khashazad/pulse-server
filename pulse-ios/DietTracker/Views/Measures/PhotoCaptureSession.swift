@@ -33,8 +33,14 @@ struct PhotoCaptureSession: View {
     @State private var newTagDraft: String = ""
     @State private var showNewTagField = false
 
+    /// Counts only photos whose `tagId` still resolves in `tagStore`. Guards
+    /// against stale or foreign UUIDs (e.g. dropped from another app) being
+    /// treated as valid assignments and sent to the server.
     private var tagAssignedCount: Int {
-        captured.lazy.filter { $0.tagId != nil }.count
+        captured.lazy.filter { photo in
+            guard let id = photo.tagId else { return false }
+            return tagStore.tag(id: id) != nil
+        }.count
     }
 
     var body: some View {
@@ -238,7 +244,13 @@ struct PhotoCaptureSession: View {
                     )
             )
             .dropDestination(for: String.self) { items, _ in
-                guard let raw = items.first, let uuid = UUID(uuidString: raw) else { return false }
+                // Reject any payload that isn't a UUID we recognise in the
+                // current tag catalog — guards against stray drags from other
+                // apps (split view) and from stale chips after a tag refresh.
+                guard let raw = items.first,
+                      let uuid = UUID(uuidString: raw),
+                      tagStore.tag(id: uuid) != nil
+                else { return false }
                 if let idx = captured.firstIndex(where: { $0.id == photo.id }) {
                     captured[idx].tagId = uuid
                     return true
@@ -306,7 +318,10 @@ struct PhotoCaptureSession: View {
         defer { uploading = false }
         var uploaded: Set<UUID> = []
         for photo in captured {
+            // Same guard as `tagAssignedCount`: never POST a tagId that isn't
+            // currently known to the tag store.
             guard let tagId = photo.tagId,
+                  tagStore.tag(id: tagId) != nil,
                   let jpeg = photo.image.jpegData(compressionQuality: 0.85) else { continue }
             await store.upload(date: date, tagId: tagId, imageData: jpeg)
             uploaded.insert(photo.id)
