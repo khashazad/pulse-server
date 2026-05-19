@@ -238,6 +238,11 @@ begin
     select 1 from information_schema.columns
     where table_name = 'progress_photos' and column_name = 'slot'
   ) then
+    -- Pre-existing prod tables were bootstrapped before tag_id existed; the
+    -- new CREATE TABLE above is skipped (table exists), so ensure the column
+    -- is present before we try to populate it.
+    alter table progress_photos add column if not exists tag_id uuid;
+
     insert into progress_photo_tags (user_key, name, normalized_name, sort_order)
     select user_key, slot, slot,
            case slot when 'front' then 0
