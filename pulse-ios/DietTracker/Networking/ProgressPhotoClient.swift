@@ -202,16 +202,22 @@ actor ProgressPhotoClient {
     }
 
     /// Executes a request and returns the raw data plus `HTTPURLResponse`.
+    /// Transport failures surface as `DietTrackerError.network`; a reachable
+    /// but non-HTTP response surfaces as `DietTrackerError.server(status: -1)`
+    /// so ops can distinguish a malformed-response path from a connection
+    /// error.
     private func raw(request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
         do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw DietTrackerError.server(status: -1)
-            }
-            return (data, http)
+            (data, response) = try await session.data(for: request)
         } catch let urlError as URLError {
             throw DietTrackerError.network(urlError)
         }
+        guard let http = response as? HTTPURLResponse else {
+            throw DietTrackerError.server(status: -1)
+        }
+        return (data, http)
     }
 
     /// Maps an HTTP status code to a `DietTrackerError` or returns on 2xx.

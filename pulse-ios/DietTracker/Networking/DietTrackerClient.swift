@@ -383,18 +383,22 @@ actor DietTrackerClient {
     /// Inputs:
     ///   - request: prepared `URLRequest`.
     /// Outputs: tuple of response body bytes and the `HTTPURLResponse`.
-    /// Exceptions: `DietTrackerError.network` wrapping a `URLError`, or
-    /// `DietTrackerError.server(status: -1)` if the response isn't HTTP.
+    /// Exceptions: `DietTrackerError.network` wrapping a `URLError` for
+    /// transport failures, or `DietTrackerError.server(status: -1)` when the
+    /// response is reachable but not HTTP (distinct from a transport error so
+    /// ops can grep for the malformed-response path).
     private func raw(request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
         do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw DietTrackerError.server(status: -1)
-            }
-            return (data, http)
+            (data, response) = try await session.data(for: request)
         } catch let urlError as URLError {
             throw DietTrackerError.network(urlError)
         }
+        guard let http = response as? HTTPURLResponse else {
+            throw DietTrackerError.server(status: -1)
+        }
+        return (data, http)
     }
 
     /// Maps an HTTP status code to a `DietTrackerError` or returns on 2xx.

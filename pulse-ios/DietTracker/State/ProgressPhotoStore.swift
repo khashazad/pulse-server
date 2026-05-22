@@ -32,6 +32,8 @@ final class ProgressPhotoStore {
     private let monitor: NWPathMonitor
     private let monitorQueue = DispatchQueue(label: "ProgressPhotoStore.monitor")
     private var workerTask: Task<Void, Never>?
+    private var workerGeneration: Int = 0
+    private var workerSleeping: Bool = false
 
     init(auth: AuthSession) {
         self.auth = auth
@@ -112,8 +114,13 @@ final class ProgressPhotoStore {
             )
             try queue.enqueueSingle(pending)
             recountPending()
-            workerTask?.cancel()
-            workerTask = nil
+            // Only cancel the worker when it is asleep on a backoff timer —
+            // an actively-processing worker should finish its in-flight POST,
+            // then drainLoop's next iteration picks up the new item via
+            // `allDue`. Cancelling mid-POST would abort sibling uploads in a
+            // multi-photo submit. Duplicate-processing is prevented by the
+            // server idempotency key on `PendingUpload.id`.
+            if workerSleeping { workerTask?.cancel() }
             kickWorker()
         } catch {
             lastError = error.localizedDescription
@@ -133,8 +140,9 @@ final class ProgressPhotoStore {
 
     // MARK: sync
 
-    /// Refreshes server metadata across the given range, evicts now-stale sha caches,
-    /// replaces the local metadata map, and kicks the worker.
+    /// Refreshes server metadata across the given range, evicts now-stale sha
+    /// caches for that range, merges the result into the local metadata map
+    /// without disturbing dates outside `[from, to]`, and kicks the worker.
     func reconcile(from: Date, to: Date) async {
         guard let client = auth?.makeProgressPhotoClient() else { return }
         do {
@@ -143,12 +151,21 @@ final class ProgressPhotoStore {
             for row in rows {
                 grouped[normalize(row.date), default: []].append(row)
             }
-            let oldSHAs = Set(photos.values.flatMap { $0 }.map(\.sha256))
+            let lo = normalize(from)
+            let hi = normalize(to)
+            let oldSHAsInRange = Set(photos.compactMap { (date, metas) in
+                (date >= lo && date <= hi) ? metas.map(\.sha256) : nil
+            }.flatMap { $0 })
             let newSHAs = Set(grouped.values.flatMap { $0 }.map(\.sha256))
-            for sha in oldSHAs.subtracting(newSHAs) {
+            for sha in oldSHAsInRange.subtracting(newSHAs) {
                 cache.evict(sha: sha)
             }
-            photos = grouped
+            for date in photos.keys where date >= lo && date <= hi {
+                photos.removeValue(forKey: date)
+            }
+            for (date, metas) in grouped {
+                photos[date] = metas
+            }
         } catch {
             lastError = error.localizedDescription
         }
@@ -160,13 +177,28 @@ final class ProgressPhotoStore {
     /// - Returns: Void.
     func kickWorker() {
         if let existing = workerTask, !existing.isCancelled { return }
+        workerGeneration += 1
+        let gen = workerGeneration
         workerTask = Task { [weak self] in
-            await self?.drainLoop()
+            await self?.drainLoop(generation: gen)
         }
     }
 
-    private func drainLoop() async {
-        defer { workerTask = nil }
+    /// Drains the upload queue until empty. Sleeps on backoff between attempts;
+    /// the sleep is cancellable so `upload()` can wake the worker for a freshly
+    /// enqueued item without waiting for the next due date.
+    /// - Parameters:
+    ///   - generation: identity assigned by `kickWorker()`; on exit we only
+    ///     clear `workerTask` if it still points at our generation (otherwise
+    ///     a newer kick has already replaced us and the assignment must stand).
+    /// - Returns: Void.
+    private func drainLoop(generation: Int) async {
+        defer {
+            if workerGeneration == generation {
+                workerTask = nil
+                workerSleeping = false
+            }
+        }
         while !Task.isCancelled {
             let now = Date()
             let due = queue.allDue(now: now)
@@ -174,7 +206,12 @@ final class ProgressPhotoStore {
                 guard let next = queue.nextDueDate(after: now) else { return }
                 let delay = max(0, next.timeIntervalSince(now))
                 let nanos = UInt64(min(delay, TimeInterval(UInt64.max / 1_000_000_000)) * 1_000_000_000)
-                do { try await Task.sleep(nanoseconds: nanos) } catch { return }
+                workerSleeping = true
+                do { try await Task.sleep(nanoseconds: nanos) } catch {
+                    workerSleeping = false
+                    return
+                }
+                workerSleeping = false
                 continue
             }
             for item in due {
@@ -198,7 +235,20 @@ final class ProgressPhotoStore {
         case .single(let p):
             let data: Data
             do {
-                data = try Data(contentsOf: URL(fileURLWithPath: p.localPath))
+                try Task.checkCancellation()
+                let path = p.localPath
+                let readTask = Task.detached(priority: .utility) {
+                    try Data(contentsOf: URL(fileURLWithPath: path))
+                }
+                data = try await withTaskCancellationHandler {
+                    try await readTask.value
+                } onCancel: {
+                    readTask.cancel()
+                }
+            } catch is CancellationError {
+                // Worker was cancelled (e.g. by an upload kick or sleeper wake).
+                // Leave the queue entry as-is so the next drain picks it up.
+                return
             } catch {
                 // Pending bytes are gone (e.g. cache cleared). Drop the entry —
                 // retrying would just loop forever on the same missing file.
