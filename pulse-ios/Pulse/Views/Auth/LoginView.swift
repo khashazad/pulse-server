@@ -18,7 +18,7 @@ struct LoginView: View {
             .frame(width: 0, height: 0)
             VStack(spacing: 24) {
                 Spacer()
-                Text("Diet Tracker")
+                Text("Pulse")
                     .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(Theme.FG.primary)
                 Text("Sign in to sync with your server.")

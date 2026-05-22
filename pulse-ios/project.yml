@@ -53,7 +53,7 @@ targets:
         basedOnDependencyAnalysis: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.khxsh.pulse
+        PRODUCT_BUNDLE_IDENTIFIER: com.khxsh.diettracker
         TARGETED_DEVICE_FAMILY: "1"  # iPhone only
         # xcodegen interpolates ${PULSE_BASE_URL} from the shell at
         # generation time, baking a literal build setting into the pbxproj.
