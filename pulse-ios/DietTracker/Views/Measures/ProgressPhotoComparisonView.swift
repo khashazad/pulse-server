@@ -19,6 +19,8 @@ struct ProgressPhotoComparisonView: View {
     @State private var dateA: Date
     @State private var dateB: Date
     @State private var expanded: ExpandedPhoto?
+    @State private var isLoading: Bool = false
+    @State private var reloadTask: Task<Void, Never>?
     @Namespace private var compareNS
 
     private struct ExpandedPhoto: Identifiable, Equatable {
@@ -76,12 +78,24 @@ struct ProgressPhotoComparisonView: View {
             }
         }
         .task {
+            isLoading = true
             await tagStore.reload()
             await reload()
+            isLoading = false
         }
         .refreshable { await reload() }
-        .onChange(of: dateA) { _, _ in Task { await reload() } }
-        .onChange(of: dateB) { _, _ in Task { await reload() } }
+        .onChange(of: dateA) { _, _ in scheduleReload() }
+        .onChange(of: dateB) { _, _ in scheduleReload() }
+        .onDisappear { reloadTask?.cancel() }
+    }
+
+    /// Cancels any in-flight reconcile and schedules a fresh one so rapid
+    /// DatePicker scrubs cannot race responses onto a stale `store.photos`.
+    private func scheduleReload() {
+        reloadTask?.cancel()
+        reloadTask = Task {
+            await reload()
+        }
     }
 
     // MARK: pickers
@@ -139,11 +153,18 @@ struct ProgressPhotoComparisonView: View {
         let b = latestByTag(on: dateB)
         let ids = orderedTagIds(a, b)
         if ids.isEmpty {
-            Text("No photos on either day.")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.FG.tertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 24)
+            if isLoading {
+                ProgressView()
+                    .tint(Theme.FG.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 24)
+            } else {
+                Text("No photos on either day.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.FG.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 24)
+            }
         } else {
             VStack(spacing: 20) {
                 ForEach(ids, id: \.self) { tagId in
@@ -172,7 +193,6 @@ struct ProgressPhotoComparisonView: View {
         if let meta {
             ComparisonPhotoCell(
                 meta: meta,
-                namespace: compareNS,
                 isExpanded: expanded?.id == meta.id,
                 onTap: {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
@@ -186,26 +206,28 @@ struct ProgressPhotoComparisonView: View {
     }
 
     private func reload() async {
+        isLoading = true
         let lo = min(dateA, dateB)
         let hi = max(dateA, dateB)
         await store.reconcile(from: lo, to: hi)
+        if !Task.isCancelled { isLoading = false }
     }
 }
 
 /// Slimmed-down photo tile for the comparison grid. No tag badge (the row
 /// header already labels the tag) and no context menu (delete belongs in the
-/// main photos view, not here).
+/// main photos view, not here). Intentionally does not publish a
+/// `matchedGeometryEffect` source — when dateA == dateB the same `meta.id`
+/// would be registered twice in the same namespace, producing undefined
+/// SwiftUI behavior. The detail view fades in/out instead.
 /// - Parameters:
 ///   - `meta`: server metadata for the photo to render.
-///   - `namespace`: shared `Namespace.ID` for `matchedGeometryEffect` into
-///     the fullscreen detail overlay.
 ///   - `isExpanded`: when `true`, renders an invisible placeholder so the
 ///     overlay can occupy the slot.
 ///   - `onTap`: invoked when the user taps the thumbnail.
 struct ComparisonPhotoCell: View {
     @Environment(ProgressPhotoStore.self) private var store
     let meta: ProgressPhotoMetadata
-    let namespace: Namespace.ID
     let isExpanded: Bool
     let onTap: () -> Void
 
@@ -221,18 +243,16 @@ struct ComparisonPhotoCell: View {
                     .resizable()
                     .scaledToFill()
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .matchedGeometryEffect(id: meta.id, in: namespace)
             } else {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Theme.BG.secondary)
                     .overlay { ProgressView().tint(Theme.FG.tertiary) }
-                    .matchedGeometryEffect(id: meta.id, in: namespace)
             }
         }
         .aspectRatio(4.0 / 5.0, contentMode: .fit)
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture { if thumb != nil { onTap() } }
-        .task(id: meta.sha256) {
+        .task(id: meta.id) {
             thumb = await store.thumb(meta)
         }
     }

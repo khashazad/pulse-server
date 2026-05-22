@@ -21,7 +21,9 @@ final class ProgressPhotoStoreSourceTests: XCTestCase {
     private func processOneSource(from source: String) throws -> String {
         let start = try XCTUnwrap(source.range(of: "private func processOne"))
         let tail = source[start.lowerBound...]
-        let end = try XCTUnwrap(tail.range(of: "\n    /// Recomputes"))
+        // Anchor on the next function signature so unrelated docstring
+        // edits don't break this test.
+        let end = try XCTUnwrap(tail.range(of: "private func recountPending"))
         return String(tail[..<end.lowerBound])
     }
 
@@ -32,22 +34,33 @@ final class ProgressPhotoStoreSourceTests: XCTestCase {
     private func uploadSource(from source: String) throws -> String {
         let start = try XCTUnwrap(source.range(of: "func upload(date: Date"))
         let tail = source[start.lowerBound...]
-        let end = try XCTUnwrap(tail.range(of: "\n    /// Evicts"))
+        // Anchor on the next function signature so unrelated docstring
+        // edits don't break this test.
+        let end = try XCTUnwrap(tail.range(of: "func delete("))
         return String(tail[..<end.lowerBound])
     }
 
-    /// Ensures new uploads can wake a worker sleeping on a later retry.
+    /// Locks in the worker-kick invariant: cancellation is gated on
+    /// `workerSleeping` (so an in-flight POST is not aborted by a sibling
+    /// upload), the unconditional `await workerTask?.value` line is NOT
+    /// present (it deadlocks the caller and opens a worker-orphan race), and
+    /// the conditional cancel precedes `kickWorker()`.
     /// - Returns: Void.
-    /// - Throws: XCTest unwrap failures when source cannot be read or expected calls are missing.
+    /// - Throws: XCTest unwrap failures when source cannot be read or
+    ///   expected calls are missing.
     func testUploadCancelsSleepingWorkerBeforeKick() throws {
         let source = try progressPhotoStoreSource()
         let upload = try uploadSource(from: source)
-        let cancel = try XCTUnwrap(upload.range(of: "workerTask?.cancel()"))
-        let clear = try XCTUnwrap(upload.range(of: "workerTask = nil"))
+        let cancelGated = try XCTUnwrap(
+            upload.range(of: "if workerSleeping { workerTask?.cancel() }")
+        )
         let kick = try XCTUnwrap(upload.range(of: "kickWorker()"))
 
-        XCTAssertLessThan(cancel.lowerBound, clear.lowerBound)
-        XCTAssertLessThan(clear.lowerBound, kick.lowerBound)
+        XCTAssertLessThan(cancelGated.lowerBound, kick.lowerBound)
+        XCTAssertFalse(
+            upload.contains("await workerTask?.value"),
+            "upload() must not block the caller on the prior worker; the cancel/kick pair plus server idempotency are sufficient."
+        )
     }
 
     /// Ensures signed-out auth does not make the due queue spin forever.

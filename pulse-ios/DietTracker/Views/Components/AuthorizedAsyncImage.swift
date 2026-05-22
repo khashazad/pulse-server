@@ -46,6 +46,7 @@ struct AuthorizedAsyncImage<Content: View, Placeholder: View>: View {
     let placeholder: () -> Placeholder
 
     @State private var loadedImage: UIImage?
+    @State private var loadedImageURL: URL?
 
     var body: some View {
         Group {
@@ -56,7 +57,11 @@ struct AuthorizedAsyncImage<Content: View, Placeholder: View>: View {
             }
         }
         .task(id: AuthorizedAsyncImageRequestIdentity(request)) {
-            loadedImage = nil
+            // Only blank the rendered image when the URL itself changes —
+            // header-only churn (e.g. token rotation, cache-policy tweak)
+            // should reload without a placeholder flicker.
+            if loadedImageURL != request.url { loadedImage = nil }
+            loadedImageURL = request.url
             await load()
         }
     }

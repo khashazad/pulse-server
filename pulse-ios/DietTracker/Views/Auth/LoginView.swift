@@ -80,17 +80,33 @@ struct LoginView: View {
 /// Zero-sized UIViewRepresentable that reports the UIWindow owning the SwiftUI
 /// view hierarchy it's installed in. Used to resolve a presentation anchor that
 /// matches the rendered scene instead of guessing across `connectedScenes`.
+/// On cold launch `makeUIView` can run before SwiftUI inserts the host view
+/// into a window; in that case we fall back to the first foreground-active
+/// window scene so the Sign-In CTA is reachable on the first tap.
 private struct WindowReader: UIViewRepresentable {
     let onResolve: (UIWindow?) -> Void
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
         view.isUserInteractionEnabled = false
-        DispatchQueue.main.async { onResolve(view.window) }
+        DispatchQueue.main.async { resolve(from: view) }
         return view
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async { onResolve(uiView.window) }
+        DispatchQueue.main.async { resolve(from: uiView) }
+    }
+
+    private func resolve(from view: UIView) {
+        if let win = view.window {
+            onResolve(win)
+            return
+        }
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let active = scenes.first(where: { $0.activationState == .foregroundActive })
+        let win = active?.windows.first(where: \.isKeyWindow)
+            ?? active?.windows.first
+            ?? scenes.flatMap(\.windows).first
+        onResolve(win)
     }
 }
