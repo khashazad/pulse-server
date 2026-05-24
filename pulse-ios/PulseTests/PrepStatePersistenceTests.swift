@@ -69,14 +69,4 @@ final class PrepStatePersistenceTests: XCTestCase {
         store.save(targets: [.init(container: c, count: 1)], weighIns: [], portionsOverride: nil)
         XCTAssertNil(store.load(matching: [c]).portionsOverride)
     }
-
-    /// Last-used weigh-in container round-trips and resolves against the list.
-    func testLastWeighInRoundTrip() {
-        let d = makeDefaults()
-        let store = PrepStatePersistence(defaults: d)
-        let c = mkContainer(tare: 100)
-        store.rememberLastWeighIn(c)
-        XCTAssertEqual(store.lastWeighInContainer(in: [c])?.id, c.id)
-        XCTAssertNil(store.lastWeighInContainer(in: [])) // dropped when absent
-    }
 }

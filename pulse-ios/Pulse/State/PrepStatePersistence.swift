@@ -10,7 +10,6 @@ struct PrepStatePersistence {
         static let targets = "prep.targets"
         static let weighIns = "prep.weighIns"
         static let portionsOverride = "prep.portionsOverride"
-        static let lastWeighInContainerId = "prep.lastWeighInContainerId"
     }
 
     /// Wire shape of a persisted target entry.
@@ -87,23 +86,5 @@ struct PrepStatePersistence {
         } else {
             defaults.removeObject(forKey: Key.portionsOverride)
         }
-    }
-
-    /// Stores the last-used weigh-in container id.
-    /// Inputs:
-    ///   - container: the container to remember.
-    /// Outputs: nothing.
-    func rememberLastWeighIn(_ container: Container) {
-        defaults.set(container.id.uuidString, forKey: Key.lastWeighInContainerId)
-    }
-
-    /// Resolves the last-used weigh-in container from `list`, if still present.
-    /// Inputs:
-    ///   - list: the live containers.
-    /// Outputs: the matching container, or nil when unset/deleted.
-    func lastWeighInContainer(in list: [Container]) -> Container? {
-        guard let raw = defaults.string(forKey: Key.lastWeighInContainerId),
-              let id = UUID(uuidString: raw) else { return nil }
-        return list.first(where: { $0.id == id })
     }
 }

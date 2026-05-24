@@ -257,28 +257,16 @@ struct PrepView: View {
             }
         case .addWeighIn:
             model.weighIns.append(.init(container: c))
-            store.rememberLastWeighIn(c)
         case .changeWeighIn(let id):
             if let idx = model.weighIns.firstIndex(where: { $0.id == id }) {
                 model.weighIns[idx].container = c
-                store.rememberLastWeighIn(c)
             }
         }
     }
 
-    /// Appends a weigh-in, defaulting its container: the sole target container if
-    /// there is exactly one distinct target, else the last-used weigh-in container,
-    /// else opens the picker.
+    /// Opens the container picker to add a weigh-in. Always presents the picker so
+    /// the user chooses which container is on the scale, rather than auto-filling.
     private func addWeighIn() {
-        let distinct = Set(model.targets.map { $0.container.id })
-        if distinct.count == 1, let c = model.targets.first?.container {
-            model.weighIns.append(.init(container: c)) // The sole target is the obvious default; intentionally skip updating last-used here.
-            return
-        }
-        if let last = lastWeighInContainer() {
-            model.weighIns.append(.init(container: last))
-            return
-        }
         pickerMode = .addWeighIn
     }
 
@@ -315,13 +303,6 @@ struct PrepView: View {
     /// Writes the current targets/weigh-ins/portions to `UserDefaults`.
     private func persist() {
         store.save(targets: model.targets, weighIns: model.weighIns, portionsOverride: model.portionsOverride)
-    }
-
-    /// Resolves the last-used weigh-in container from the loaded list, if any.
-    /// Outputs: the matching `Container`, or nil when unset/not loaded/deleted.
-    private func lastWeighInContainer() -> Container? {
-        guard case .loaded(let list) = listModel?.state ?? .idle else { return nil }
-        return store.lastWeighInContainer(in: list)
     }
 
     /// Refreshes container snapshots and drops deleted ones using the loaded list.
