@@ -69,6 +69,7 @@ struct PrepView: View {
                 .onDisappear {
                     Task {
                         await listModel?.load()
+                        hydrateIfNeeded()
                         reconcile()
                     }
                 }
@@ -297,12 +298,14 @@ struct PrepView: View {
 
     // MARK: - Persistence & reconcile
 
-    /// Loads saved targets/weigh-ins/portions from `UserDefaults` once, matching
-    /// stored container ids against the loaded list (dropping unknown ids).
+    /// Loads saved targets/weigh-ins/portions from `UserDefaults` once the
+    /// container list is available, matching stored container ids against it
+    /// (dropping unknown ids). Stays pending (not marked done) until a successful
+    /// load, so a failed initial load can still hydrate on a later reload.
     private func hydrateIfNeeded() {
         guard !hydrated else { return }
-        hydrated = true
         guard case .loaded(let list) = listModel?.state ?? .idle else { return }
+        hydrated = true
         let loaded = store.load(matching: list)
         model.targets = loaded.targets
         model.weighIns = loaded.weighIns
