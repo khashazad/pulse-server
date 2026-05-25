@@ -1,0 +1,6 @@
+{
+  "entries": [
+    { "id": "33333333-3333-3333-3333-333333333333", "user_key": "khash", "name": "white rice", "normalized_name": "white rice", "usda_fdc_id": 169756, "usda_description": "Rice, white, cooked", "custom_food_id": null, "basis": "per_100g", "serving_size": null, "serving_size_unit": null, "calories": 130, "protein_g": 2.7, "carbs_g": 28.0, "fat_g": 0.3, "aliases": ["rice"], "created_at": "2026-05-01T00:00:00Z", "updated_at": "2026-05-01T00:00:00Z" },
+    { "id": "44444444-4444-4444-4444-444444444444", "user_key": "khash", "name": "Protein Shake", "normalized_name": "protein shake", "usda_fdc_id": null, "usda_description": null, "custom_food_id": "22222222-2222-2222-2222-222222222222", "basis": null, "serving_size": null, "serving_size_unit": null, "calories": null, "protein_g": null, "carbs_g": null, "fat_g": null, "aliases": [], "created_at": "2026-05-01T00:00:00Z", "updated_at": "2026-05-01T00:00:00Z" }
+  ]
+}
