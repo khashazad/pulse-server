@@ -120,6 +120,7 @@ final class ViewRenderTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(pump))
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
+        window.rootViewController = nil
         window.isHidden = true
     }
 

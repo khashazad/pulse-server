@@ -238,6 +238,7 @@ final class ViewModelLoadTests: XCTestCase {
 
     // MARK: - food search
 
+    @MainActor
     func test_foodSearchModel_loadMyFoodsAndSearch() async {
         let m = FoodSearchModel(auth: makeAuth(), debounce: .milliseconds(1))
         await m.loadMyFoods()
