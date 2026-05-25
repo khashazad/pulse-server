@@ -10,6 +10,7 @@ struct PrepStatePersistence {
         static let targets = "prep.targets"
         static let weighIns = "prep.weighIns"
         static let portionsOverride = "prep.portionsOverride"
+        static let batchItems = "prep.batchItems"
     }
 
     /// Wire shape of a persisted target entry.
@@ -85,6 +86,23 @@ struct PrepStatePersistence {
             defaults.set(p, forKey: Key.portionsOverride)
         } else {
             defaults.removeObject(forKey: Key.portionsOverride)
+        }
+    }
+
+    /// Loads the persisted batch food items.
+    /// Outputs: the saved items, or an empty array when nothing is stored or decoding fails.
+    func loadBatchItems() -> [BatchFoodItem] {
+        guard let data = defaults.data(forKey: Key.batchItems),
+              let items = try? JSONDecoder().decode([BatchFoodItem].self, from: data) else { return [] }
+        return items
+    }
+
+    /// Saves the batch food items, replacing any previously stored list.
+    /// Inputs:
+    ///   - items: the current batch items to persist.
+    func saveBatchItems(_ items: [BatchFoodItem]) {
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: Key.batchItems)
         }
     }
 }
