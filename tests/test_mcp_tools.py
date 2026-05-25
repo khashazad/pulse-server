@@ -72,3 +72,57 @@ async def test_workflow_instructions_mention_aliases() -> None:
     from pulse_server.mcp.server import WORKFLOW_INSTRUCTIONS
     assert "add_meal_alias" in WORKFLOW_INSTRUCTIONS
     assert "add_food_alias" in WORKFLOW_INSTRUCTIONS
+
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+
+def _settings(**over) -> SimpleNamespace:
+    """Build a minimal settings stand-in for ``build_mcp`` guard tests."""
+    base = dict(
+        timezone="America/Toronto",
+        mcp_oauth_enabled=False,
+        github_users_allowlist=set(),
+        is_local_env=True,
+        mcp_service_token_enabled=False,
+        mcp_service_token="x" * 32,
+        allowed_github_users_set=set(),
+        legacy_user_key="khash",
+        mcp_allow_unauth=False,
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def test_build_mcp_refuses_oauth_without_allowlist_outside_local() -> None:
+    """GitHub OAuth + empty allowlist outside local env is refused."""
+    from pulse_server.mcp.server import build_mcp
+
+    settings = _settings(mcp_oauth_enabled=True, github_users_allowlist=set(), is_local_env=False)
+    with patch("pulse_server.mcp.server.get_settings", return_value=settings):
+        with pytest.raises(RuntimeError):
+            build_mcp(lambda: None)
+
+
+def test_build_mcp_refuses_unauth_outside_local() -> None:
+    """No auth provider outside local env without the unauth escape hatch is refused."""
+    from pulse_server.mcp.server import build_mcp
+
+    settings = _settings(is_local_env=False, mcp_allow_unauth=False)
+    with patch("pulse_server.mcp.server.get_settings", return_value=settings):
+        with pytest.raises(RuntimeError):
+            build_mcp(lambda: None)
+
+
+def test_build_mcp_adds_allowlist_middleware_with_service_token() -> None:
+    """A service token plus a non-empty GitHub allowlist installs the gate middleware."""
+    from pulse_server.mcp.server import build_mcp
+
+    settings = _settings(mcp_service_token_enabled=True, allowed_github_users_set={"khash"})
+    with patch("pulse_server.mcp.server.get_settings", return_value=settings), patch(
+        "pulse_server.mcp.server.FastMCP.add_middleware"
+    ) as add_mw:
+        mcp = build_mcp(lambda: None)
+    assert mcp is not None
+    add_mw.assert_called_once()

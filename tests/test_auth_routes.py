@@ -402,3 +402,103 @@ def test_logout_deletes_session_and_returns_204(client):
         r = client.post("/auth/logout", headers={"Authorization": "Bearer tok"})
     assert r.status_code == 204
     fake_repo.delete.assert_awaited()
+
+
+# ---- security hardening: rate limiting, purge, headers ------------------------
+
+
+def test_start_rate_limited_redirects(client):
+    """`/auth/google/start` over the per-IP limit redirects with `error=rate_limited`."""
+    with patch("pulse_server.routers.auth._auth_rate_limiter.allow", return_value=False):
+        r = client.get(
+            "/auth/google/start",
+            params={"code_challenge": "abc", "code_challenge_method": "S256"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 302
+    assert "error=rate_limited" in r.headers["location"]
+
+
+def test_callback_rate_limited_redirects(client):
+    """`/auth/google/callback` over the per-IP limit redirects with `error=rate_limited`."""
+    with patch("pulse_server.routers.auth._auth_rate_limiter.allow", return_value=False):
+        r = client.get(
+            "/auth/google/callback",
+            params={"code": "x", "state": "s"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 302
+    assert "error=rate_limited" in r.headers["location"]
+
+
+def test_exchange_rate_limited_returns_429(client):
+    """`POST /auth/google/exchange` over the per-IP limit returns 429."""
+    with patch("pulse_server.routers.auth._auth_rate_limiter.allow", return_value=False):
+        r = client.post(
+            "/auth/google/exchange",
+            json={"code": "x", "code_verifier": "v" * 43},
+        )
+    assert r.status_code == 429
+
+
+def test_callback_purges_expired_codes(client, _patch_db_repo):
+    """The happy-path callback opportunistically purges expired one-time codes."""
+    client.cookies.set("oauth_state", "s", path="/auth/google")
+    client.cookies.set("oauth_pkce", "challenge", path="/auth/google")
+    with patch(
+        "pulse_server.routers.auth.exchange_code_for_id_token",
+        new_callable=AsyncMock, return_value="jwt",
+    ), patch(
+        "pulse_server.routers.auth.verify_id_token",
+        return_value=("khashzd@gmail.com", "sub"),
+    ):
+        r = client.get(
+            "/auth/google/callback",
+            params={"code": "x", "state": "s"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 302
+    _patch_db_repo.purge_expired.assert_awaited_once()
+
+
+def test_disallowed_email_does_not_log_full_address(client, _patch_db_repo, caplog):
+    """A rejected sign-in logs only the email domain, never the full address."""
+    import logging
+
+    client.cookies.set("oauth_state", "s", path="/auth/google")
+    client.cookies.set("oauth_pkce", "challenge", path="/auth/google")
+    with caplog.at_level(logging.INFO, logger="pulse_server.routers.auth"), patch(
+        "pulse_server.routers.auth.exchange_code_for_id_token",
+        new_callable=AsyncMock, return_value="jwt",
+    ), patch(
+        "pulse_server.routers.auth.verify_id_token",
+        return_value=("secret.person@example.com", "sub"),
+    ):
+        client.get(
+            "/auth/google/callback",
+            params={"code": "x", "state": "s"},
+            follow_redirects=False,
+        )
+    joined = " ".join(rec.getMessage() for rec in caplog.records)
+    assert "secret.person@example.com" not in joined
+    assert "example.com" in joined
+
+
+def test_security_headers_present_on_responses(client):
+    """Baseline security headers are stamped on responses (here: /health)."""
+    r = client.get("/health")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["x-frame-options"] == "DENY"
+    assert r.headers["referrer-policy"] == "no-referrer"
+
+
+def test_hsts_header_set_when_request_is_https(client):
+    """HSTS is emitted when the request reports TLS via x-forwarded-proto."""
+    r = client.get("/health", headers={"x-forwarded-proto": "https"})
+    assert "strict-transport-security" in r.headers
+
+
+def test_hsts_header_absent_on_plain_http(client):
+    """HSTS is not emitted for plain-HTTP requests."""
+    r = client.get("/health")
+    assert "strict-transport-security" not in r.headers

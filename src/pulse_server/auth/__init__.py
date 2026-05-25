@@ -10,12 +10,14 @@ the legacy ``?user_key=`` query parameter on protected routes.
 """
 
 from pulse_server.auth.middleware import (
+    SecurityHeadersMiddleware,
     SessionAuthMiddleware,
     UserKeyGuardrailMiddleware,
     require_session,
 )
 
 __all__ = [
+    "SecurityHeadersMiddleware",
     "SessionAuthMiddleware",
     "UserKeyGuardrailMiddleware",
     "require_session",

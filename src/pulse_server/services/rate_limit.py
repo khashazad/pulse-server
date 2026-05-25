@@ -59,3 +59,15 @@ class SlidingWindowRateLimiter:
                 return False
             hits.append(current)
             return True
+
+    def reset(self) -> None:
+        """Clear all recorded hits, restoring every key to a full quota.
+
+        Intended for test isolation: the limiter is process-global, so without a
+        reset its state would leak between tests sharing the same worker.
+
+        **Outputs:**
+        - None: Mutates internal state in place.
+        """
+        with self._lock:
+            self._hits.clear()

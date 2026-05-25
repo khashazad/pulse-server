@@ -17,12 +17,27 @@ uv run pytest tests/ -v
 # Run a single test
 uv run pytest tests/test_app.py::test_health_check -v
 
+# Run the coverage gate (must stay >= 80%; see Test coverage policy below)
+uv run pytest tests/ --cov --cov-report=term-missing --cov-fail-under=80
+
 # Run integration tests (requires TEST_DATABASE_URL)
 TEST_DATABASE_URL=postgresql://localhost/test uv run pytest -m integration -v
 
 # Run migrations
 uv run alembic upgrade head
 ```
+
+## Test coverage policy
+
+The unit suite must hold at **>= 80% line coverage** (`pulse_server` package). Any
+change that adds or modifies code must keep coverage at or above this floor — do
+not merge work that drops it below 80%. When you add a feature or branch, add the
+tests that cover it in the same change. The gate is `uv run pytest tests/ --cov
+--cov-fail-under=80`; coverage settings live in `[tool.coverage.*]` in
+`pyproject.toml` (`fail_under = 80`). Unit tests mock the DB pool and USDA client
+(see `tests/test_router_endpoints.py` for the router pattern and
+`tests/test_mcp_tool_handlers.py` for the MCP tool pattern), so the gate runs
+without a database; integration tests are additive, not part of the floor.
 
 ## Architecture
 

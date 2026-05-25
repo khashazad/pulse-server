@@ -69,6 +69,41 @@ class _ExemptionMixin:
         return any(path.startswith(prefix) for prefix in self._exempt_prefixes)
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach baseline security response headers to every response.
+
+    Sets ``X-Content-Type-Options``, ``X-Frame-Options``, and
+    ``Referrer-Policy`` unconditionally, and ``Strict-Transport-Security`` only
+    when the request arrived over TLS (directly or via a terminating proxy that
+    reports ``x-forwarded-proto: https``). Existing headers are never
+    overwritten, so handlers that set their own values win.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        """Run the handler chain and stamp baseline security headers on the response.
+
+        **Inputs:**
+        - request (Request): Incoming HTTP request (used to detect TLS).
+        - call_next (Callable): Downstream handler chain.
+
+        **Outputs:**
+        - Response: The downstream response with security headers added.
+        """
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        is_https = (
+            request.url.scheme == "https"
+            or request.headers.get("x-forwarded-proto") == "https"
+        )
+        if is_https:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+            )
+        return response
+
+
 class UserKeyGuardrailMiddleware(_ExemptionMixin, BaseHTTPMiddleware):
     """Rejects ``?user_key=`` on protected routes during the cutover window."""
 

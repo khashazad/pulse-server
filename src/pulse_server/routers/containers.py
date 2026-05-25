@@ -36,6 +36,7 @@ from pulse_server.services.container_photos import (
     process_container_photo,
 )
 from pulse_server.services.normalize import normalize_name
+from pulse_server.services.rate_limit import SlidingWindowRateLimiter
 
 settings = get_settings()
 router = APIRouter(dependencies=[Depends(require_session)])
@@ -43,6 +44,15 @@ TZ = ZoneInfo(settings.timezone)
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 _UPLOAD_CHUNK_BYTES = 64 * 1024
+
+# Per-user throttle on photo uploads. Each upload decodes/transcodes an image and
+# writes BYTEA inline to Postgres, so bound how fast one session can churn them.
+_UPLOAD_RATE_LIMIT_MAX_REQUESTS = 20
+_UPLOAD_RATE_LIMIT_WINDOW_SECONDS = 60.0
+_photo_upload_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=_UPLOAD_RATE_LIMIT_MAX_REQUESTS,
+    window_seconds=_UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
 async def _read_capped(file: UploadFile, max_bytes: int) -> bytearray:
@@ -265,11 +275,14 @@ async def upload_container_photo(
     - ContainerPhotoStatus: ``has_photo=True`` once the upload is stored.
 
     **Exceptions:**
+    - HTTPException(429): Raised when the user exceeds the per-user upload rate limit.
     - HTTPException(413): Raised when the upload exceeds the 10 MiB cap.
     - HTTPException(415): Raised when the payload is not a supported/decodable image.
     - HTTPException(404): Raised when the container does not exist for this user.
     """
     user_key = request.state.user_key
+    if not _photo_upload_rate_limiter.allow(user_key):
+        raise HTTPException(status_code=429, detail="Too many photo uploads; slow down and retry.")
 
     try:
         raw = await _read_capped(file, MAX_UPLOAD_BYTES)

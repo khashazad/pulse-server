@@ -33,12 +33,41 @@ from pulse_server.config import get_settings
 from pulse_server.db import get_session
 from pulse_server.repositories.auth_exchange_codes import AuthExchangeCodesRepository
 from pulse_server.repositories.sessions import SessionsRepository
+from pulse_server.services.rate_limit import SlidingWindowRateLimiter
 
 
 logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/auth")
+
+# Per-IP throttle on the unauthenticated OAuth handshake. Each call can trigger an
+# outbound Google token exchange and a DB write, so bound the flood rate from any
+# single source while leaving ample room for legitimate retries.
+AUTH_RATE_LIMIT_MAX_REQUESTS = 30
+AUTH_RATE_LIMIT_WINDOW_SECONDS = 60.0
+_auth_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=AUTH_RATE_LIMIT_MAX_REQUESTS,
+    window_seconds=AUTH_RATE_LIMIT_WINDOW_SECONDS,
+)
+
+
+def _client_ip(request: Request) -> str:
+    """Return the client IP used as the OAuth rate-limit key.
+
+    Prefers the left-most ``X-Forwarded-For`` hop (the original client when the
+    app runs behind a trusted proxy) and falls back to the direct peer address.
+
+    **Inputs:**
+    - request (Request): Incoming HTTP request.
+
+    **Outputs:**
+    - str: Client IP string, or ``"unknown"`` when it cannot be determined.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 
 STATE_COOKIE_NAME = "oauth_state"
@@ -120,6 +149,10 @@ async def google_start(
       or a 302 back to the app's scheme with ``error=invalid_request`` when the
       PKCE challenge is absent or malformed.
     """
+    if not _auth_rate_limiter.allow(_client_ip(request)):
+        logger.info("google start rate-limited")
+        return _app_redirect(error="rate_limited")
+
     method = code_challenge_method or "S256"
     if not code_challenge or method != "S256":
         logger.info("google start rejected: missing/invalid PKCE challenge")
@@ -180,6 +213,10 @@ async def google_callback(
     - RedirectResponse: 302 to the app scheme with a one-time ``code`` on success,
       or ``?error=<code>`` on failure.
     """
+    if not _auth_rate_limiter.allow(_client_ip(request)):
+        logger.info("google callback rate-limited")
+        return _app_redirect(error="rate_limited")
+
     if error:
         logger.info("google denied auth: %s", error)
         return _app_redirect(error="access_denied")
@@ -207,7 +244,10 @@ async def google_callback(
 
     settings = get_settings()
     if email not in settings.allowed_emails_set:
-        logger.info("rejected sign-in for non-allowlisted email: %s", email)
+        # Log only the domain, not the full address, to keep PII out of logs while
+        # preserving enough signal to spot probing against a specific org.
+        _, _, domain = email.rpartition("@")
+        logger.info("rejected sign-in for non-allowlisted email domain: %s", domain or "unknown")
         return _app_redirect(error="not_allowed")
 
     exchange_code = generate_token(num_bytes=settings.session_token_bytes)
@@ -216,6 +256,9 @@ async def google_callback(
 
     async with get_session() as db_session:
         repo = AuthExchangeCodesRepository(db_session)
+        # Opportunistic cleanup: drop expired one-time codes while we hold the
+        # session, so stale rows don't accumulate without a separate scheduler.
+        await repo.purge_expired(now)
         await repo.create(
             code_hash=hash_token(exchange_code),
             email=email,
@@ -248,7 +291,7 @@ class ExchangeResponse(BaseModel):
 
 
 @router.post("/google/exchange", response_model=ExchangeResponse)
-async def google_exchange(body: ExchangeRequest) -> ExchangeResponse:
+async def google_exchange(request: Request, body: ExchangeRequest) -> ExchangeResponse:
     """Redeem a one-time exchange code with its PKCE verifier for a session token.
 
     The code is consumed (deleted) on first lookup regardless of outcome, so it
@@ -257,15 +300,20 @@ async def google_exchange(body: ExchangeRequest) -> ExchangeResponse:
     token is never placed in a URL.
 
     **Inputs:**
+    - request (Request): Incoming HTTP request, used for the per-IP rate-limit key.
     - body (ExchangeRequest): The one-time ``code`` and the PKCE ``code_verifier``.
 
     **Outputs:**
     - ExchangeResponse: The bearer ``token``, authenticated ``email``, and session ``expires_at``.
 
     **Raises:**
+    - HTTPException(429): When the caller exceeds the per-IP OAuth rate limit.
     - HTTPException(400): When the code is unknown/already used/expired, or the
       PKCE verifier does not match.
     """
+    if not _auth_rate_limiter.allow(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="Too many requests; slow down and retry.")
+
     settings = get_settings()
     now = datetime.now(timezone.utc)
 

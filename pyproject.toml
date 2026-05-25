@@ -22,6 +22,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.25",
+    "pytest-cov>=7.1",
 ]
 
 [build-system]
@@ -37,3 +38,14 @@ pythonpath = ["src"]
 markers = [
     "integration: marks tests that require a real PostgreSQL database",
 ]
+
+# Coverage policy: the unit suite must hold at >= 80% line coverage.
+# Run the gate with: uv run pytest tests/ --cov --cov-fail-under=80
+# (kept out of default addopts so single-test runs aren't gated.)
+[tool.coverage.run]
+source = ["src/pulse_server"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80

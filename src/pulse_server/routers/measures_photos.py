@@ -38,10 +38,20 @@ from pulse_server.services.progress_photo_service import (
     MAX_UPLOAD_BYTES,
     insert_one,
 )
+from pulse_server.services.rate_limit import SlidingWindowRateLimiter
 
 router = APIRouter(prefix="/measures", dependencies=[Depends(require_session)])
 
 _UPLOAD_CHUNK_BYTES = 64 * 1024
+
+# Per-user throttle on progress-photo uploads. Each upload decodes/transcodes an
+# image and writes BYTEA inline to Postgres, so bound the per-session churn rate.
+_UPLOAD_RATE_LIMIT_MAX_REQUESTS = 20
+_UPLOAD_RATE_LIMIT_WINDOW_SECONDS = 60.0
+_photo_upload_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=_UPLOAD_RATE_LIMIT_MAX_REQUESTS,
+    window_seconds=_UPLOAD_RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
 async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
@@ -191,12 +201,15 @@ async def create_photo(
     - dict: Metadata for the inserted (or pre-existing) row.
 
     **Exceptions:**
+    - HTTPException(429): Raised when the user exceeds the per-user upload rate limit.
     - HTTPException(400): Raised for future dates.
     - HTTPException(404): Raised when ``tag_id`` does not belong to the user.
     - HTTPException(413): Raised when the upload exceeds the byte cap.
     - HTTPException(415): Raised when the image is unsupported.
     """
     user_key = request.state.user_key
+    if not _photo_upload_rate_limiter.allow(user_key):
+        raise HTTPException(status_code=429, detail="Too many photo uploads; slow down and retry.")
     raw = await _read_capped(file, MAX_UPLOAD_BYTES)
     repo = ProgressPhotoRepository(session)
     tag_repo = ProgressPhotoTagRepository(session)

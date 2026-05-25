@@ -19,7 +19,11 @@ from fastapi import FastAPI
 from fastmcp.utilities.lifespan import combine_lifespans
 
 from pulse_server import db
-from pulse_server.auth import SessionAuthMiddleware, UserKeyGuardrailMiddleware
+from pulse_server.auth import (
+    SecurityHeadersMiddleware,
+    SessionAuthMiddleware,
+    UserKeyGuardrailMiddleware,
+)
 from pulse_server.config import get_settings
 from pulse_server.mcp import build_mcp
 
@@ -117,6 +121,9 @@ app.add_middleware(
     exempt_paths=_mcp_exempt_paths,
     exempt_prefixes=_mcp_exempt_prefixes,
 )
+# Added last so it is the outermost layer: security headers are stamped on every
+# response, including the 401s the auth middleware returns before the handler runs.
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.get("/health")
