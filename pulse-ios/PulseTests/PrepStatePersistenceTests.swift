@@ -69,4 +69,26 @@ final class PrepStatePersistenceTests: XCTestCase {
         store.save(targets: [.init(container: c, count: 1)], weighIns: [], portionsOverride: nil)
         XCTAssertNil(store.load(matching: [c]).portionsOverride)
     }
+
+    /// Batch food items round-trip through UserDefaults independently of the
+    /// container-resolution path (items store everything they need).
+    func test_batchItems_roundTrip() {
+        let defaults = UserDefaults(suiteName: "prep.batch.test.\(UUID().uuidString)")!
+        let store = PrepStatePersistence(defaults: defaults)
+        let item = BatchFoodItem(
+            id: UUID(), displayName: "White rice", usdaFdcId: 169756, usdaDescription: "Rice",
+            customFoodId: nil,
+            nutrition: FoodNutrition(basis: .per100g, servingSize: nil, servingSizeUnit: nil,
+                                     caloriesPerBasis: 130, proteinGPerBasis: 2.7, carbsGPerBasis: 28, fatGPerBasis: 0.3),
+            quantity: .typed(value: 200, unit: .grams), containerId: nil,
+            macros: MacroTotals(calories: 260, proteinG: 5.4, carbsG: 56, fatG: 0.6))
+        store.saveBatchItems([item])
+        XCTAssertEqual(store.loadBatchItems(), [item])
+    }
+
+    /// Loading with nothing saved yields an empty array.
+    func test_batchItems_emptyByDefault() {
+        let defaults = UserDefaults(suiteName: "prep.batch.empty.\(UUID().uuidString)")!
+        XCTAssertEqual(PrepStatePersistence(defaults: defaults).loadBatchItems(), [])
+    }
 }
