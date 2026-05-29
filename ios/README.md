@@ -1,6 +1,6 @@
 # pulse-ios
 
-SwiftUI iOS 17+ client for the self-hosted nutrition / meal-prep tracker. Single-user (identity hardcoded to `user_key = "khash"`); talks JSON over HTTP to [`pulse-server`](../pulse-server).
+SwiftUI iOS 17+ client for the self-hosted nutrition / meal-prep tracker. Single-user (identity hardcoded to `user_key = "khash"`); talks JSON over HTTP to [`server`](../server).
 
 ## What it does
 
@@ -72,7 +72,7 @@ xcodebuild ... test -only-testing:PulseTests/PrepModelTests/testNetGramsSubtract
 
 ## Wire-format contract with the server
 
-Server DTOs in `pulse-server/src/diet_tracker_server/models/` are Pydantic `snake_case`; iOS mirrors them as Codable `camelCase` with explicit `CodingKeys`. Every request appends `?user_key=khash` and sends `X-API-Key` (legacy single-user path), plus the Bearer session token from `AuthSession` on session-auth routes.
+Server DTOs in `server/src/diet_tracker_server/models/` are Pydantic `snake_case`; iOS mirrors them as Codable `camelCase` with explicit `CodingKeys`. Every request appends `?user_key=khash` and sends `X-API-Key` (legacy single-user path), plus the Bearer session token from `AuthSession` on session-auth routes.
 
 ## Design docs
 

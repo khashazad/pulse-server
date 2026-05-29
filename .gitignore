@@ -1,4 +1,4 @@
-# Monorepo root — see pulse-server/.gitignore and pulse-ios/.gitignore for subproject rules
+# Monorepo root — see server/.gitignore and ios/.gitignore for subproject rules
 
 # OS / editor
 .DS_Store
