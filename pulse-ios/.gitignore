@@ -1,0 +1,32 @@
+# Brainstorming session artifacts
+.superpowers/
+
+# Claude Code per-session state
+.claude/
+
+# Per-developer direnv env (PULSE_BASE_URL etc.)
+.envrc
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# xcodegen — regenerate from project.yml
+Pulse.xcodeproj/
+
+# Security scan artifacts (may contain credential snapshots) — never commit
+.deepsec/
